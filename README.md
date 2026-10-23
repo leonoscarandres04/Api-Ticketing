@@ -1,6 +1,6 @@
 # API de Ticketing
 
-API RESTful para la gestión de eventos y venta de entradas digitales: administra eventos, controla el aforo en tiempo real, procesa compras y valida boletos para evitar la venta duplicada.
+API RESTful para la gestión de eventos y venta de entradas digitales: administra eventos, controla el aforo en tiempo real, procesa compras y valida boletas para evitar la venta duplicada.
 
 **Equipo:** Andres Felipe Morales Velosa, Oscar Andres Leon Galarza, Isabela Martínez Peñaloza
 **Materia:** Desarrollo de Software Web Backend
@@ -52,11 +52,11 @@ index.js       arranque del servidor
 | POST | `/api/eventos` | Listo |
 | PUT | `/api/eventos/:id` | Listo |
 | DELETE | `/api/eventos/:id` | Listo |
-| GET | `/api/boletos` (`?evento_id=`) | Listo |
-| GET | `/api/boletos/:id` | Listo |
-| PATCH | `/api/boletos/:id/anular` | Listo (falta devolver el cupo) |
-| DELETE | `/api/boletos/:id` | Listo |
-| POST | `/api/boletos/validar` | Pendiente |
+| GET | `/api/boletas` (`?evento_id=`) | Listo |
+| GET | `/api/boletas/:id` | Listo |
+| PATCH | `/api/boletas/:id/anular` | Listo (falta devolver el cupo) |
+| DELETE | `/api/boletas/:id` | Listo |
+| POST | `/api/boletas/validar` | Pendiente |
 | GET | `/api/compras` | Listo |
 | GET | `/api/compras/:id` | Listo |
 | POST | `/api/compras` | Pendiente |
@@ -71,9 +71,9 @@ index.js       arranque del servidor
 Buscar `TODO` en el código para ver dónde va cada cosa.
 
 - **Autenticación:** registro y login con JWT (`authController.js`) y completar `middlewares/auth.js` (por ahora deja pasar todo).
-- **Flujo de compra y aforo:** crear la compra en una transacción que bloquee el evento, descuente el aforo y genere los boletos (`compraModel.js`); pago simulado.
-- **Validación de boletos:** marcar el boleto como usado y rechazar los repetidos o anulados.
-- **Swagger:** documentar boletos, compras, usuarios y auth (ya está el ejemplo en `routes/eventoRoutes.js`).
+- **Flujo de compra y aforo:** crear la compra en una transacción que bloquee el evento, descuente el aforo y genere las boletas (`compraModel.js`); pago simulado.
+- **Validación de boletas:** marcar la boleta como usada y rechazar las repetidas o anuladas.
+- **Swagger:** documentar boletas, compras, usuarios y auth (ya está el ejemplo en `routes/eventoRoutes.js`).
 - **Pruebas:** concurrencia y prevención de sobreventa.
 
 Usuarios de prueba (contraseña `123456`): `organizador@ticketing.com` y `comprador@ticketing.com`.

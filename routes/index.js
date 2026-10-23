@@ -11,6 +11,6 @@ router.use('/auth', require('./authRoutes'));
 router.use('/usuarios', require('./usuarioRoutes'));
 router.use('/eventos', require('./eventoRoutes'));
 router.use('/compras', require('./compraRoutes'));
-router.use('/boletos', require('./boletoRoutes'));
+router.use('/boletas', require('./boletaRoutes'));
 
 module.exports = router;

@@ -18,7 +18,7 @@ async function obtener(req, res) {
 
 // POST /api/compras
 async function crear(req, res) {
-    // TODO (flujo de compra): recibir evento_id y cantidad, controlar el aforo y generar los boletos
+    // TODO (flujo de compra): recibir evento_id y cantidad, controlar el aforo y generar las boletas
     res.status(501).json({ mensaje: 'Pendiente: flujo de compra' });
 }
 

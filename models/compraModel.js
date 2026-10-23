@@ -20,7 +20,7 @@ async function listarPorComprador(compradorId) {
 // TODO (flujo de compra): crear la compra dentro de una transaccion que
 // 1. bloquee el evento (SELECT ... FOR UPDATE) y revise el aforo_disponible
 // 2. descuente la cantidad del aforo para evitar la sobreventa
-// 3. registre la compra y genere un boleto con codigo unico por cada entrada
+// 3. registre la compra y genere una boleta con codigo unico por cada entrada
 // 4. simule el pago y cambie el estado a 'pagada'
 
 module.exports = { listar, obtenerPorId, listarPorComprador };

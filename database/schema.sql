@@ -1,5 +1,5 @@
 -- Base de datos del Sistema de Ticketing
--- Entidades: Usuario, Evento, Compra y Boleto
+-- Entidades: Usuario, Evento, Compra y Boleta
 -- Ejecutar: mysql -u root -p < database/schema.sql
 
 DROP DATABASE IF EXISTS ticketing;
@@ -48,17 +48,17 @@ CREATE TABLE compras (
     CONSTRAINT chk_cantidad CHECK (cantidad > 0)
 );
 
--- Boletos generados por cada compra; el codigo unico sirve para validar la entrada
-CREATE TABLE boletos (
+-- Boletas generadas por cada compra; el codigo unico sirve para validar la entrada
+CREATE TABLE boletas (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     compra_id   INT NOT NULL,
     evento_id   INT NOT NULL,
     codigo      VARCHAR(64) NOT NULL UNIQUE,
-    estado      ENUM('valido', 'usado', 'anulado') NOT NULL DEFAULT 'valido',
-    usado_en    DATETIME NULL,
+    estado      ENUM('valida', 'usada', 'anulada') NOT NULL DEFAULT 'valida',
+    usada_en    DATETIME NULL,
     creado_en   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_boletos_compra FOREIGN KEY (compra_id) REFERENCES compras(id) ON DELETE CASCADE,
-    CONSTRAINT fk_boletos_evento FOREIGN KEY (evento_id) REFERENCES eventos(id)
+    CONSTRAINT fk_boletas_compra FOREIGN KEY (compra_id) REFERENCES compras(id) ON DELETE CASCADE,
+    CONSTRAINT fk_boletas_evento FOREIGN KEY (evento_id) REFERENCES eventos(id)
 );
 
 -- Datos de prueba (password de ambos: 123456, encriptada con bcrypt)

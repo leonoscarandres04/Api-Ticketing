@@ -1,10 +1,11 @@
 {
   "name": "api-ticketing",
   "version": "1.0.0",
-  "description": "",
+  "description": "API RESTful para la gestion de eventos y venta de entradas digitales (Ticketing)",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "repository": {
     "type": "git",
@@ -20,6 +21,12 @@
   "homepage": "https://github.com/leonoscarandres04/Api-Ticketing#readme",
   "dependencies": {
     "dotenv": "^18.0.8",
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "mysql2": "^3.24.6",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

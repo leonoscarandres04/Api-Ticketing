@@ -24,6 +24,9 @@ function manejarErrores(err, req, res, next) {
     if (err.code === 'ER_ROW_IS_REFERENCED_2') {
         return res.status(409).json({ mensaje: 'No se puede eliminar porque tiene registros asociados' });
     }
+    if (err.code === 'ER_BAD_NULL_ERROR') {
+        return res.status(400).json({ mensaje: 'Falta un campo obligatorio' });
+    }
     if (err.code === 'ER_CHECK_CONSTRAINT_VIOLATED') {
         return res.status(400).json({ mensaje: 'Los datos no cumplen las reglas de la base de datos' });
     }

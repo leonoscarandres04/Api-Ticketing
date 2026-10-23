@@ -18,7 +18,7 @@ async function crear(evento) {
     const [resultado] = await pool.query(
         `INSERT INTO eventos (organizador_id, nombre, descripcion, lugar, fecha, aforo_total, aforo_disponible, precio)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [organizador_id, nombre, descripcion, lugar, fecha, aforo_total, aforo_total, precio]
+        [organizador_id, nombre, descripcion ?? null, lugar, fecha, aforo_total, aforo_total, precio ?? 0]
     );
     return obtenerPorId(resultado.insertId);
 }

@@ -1,6 +1,7 @@
 // Autenticacion con JWT
 const bcrypt = require('bcrypt');
 const Usuario = require('../models/usuarioModel');
+const jwt = require('jsonwebtoken');
 
 const ROLES = ['organizador', 'comprador'];
 
@@ -29,8 +30,32 @@ async function registro(req, res) {
 
 // POST /api/auth/login
 async function login(req, res) {
-    // TODO: buscar por email, comparar la password y devolver un token JWT con id y rol
-    res.status(501).json({ mensaje: 'Pendiente: login con JWT' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ mensaje: 'email y password son obligatorios' });
+    }
+
+    const usuario = await Usuario.obtenerPorEmail(email);
+    // Mismo mensaje si el email no existe o la password es incorrecta
+    if (!usuario) {
+        return res.status(401).json({ mensaje: 'Credenciales invalidas' });
+    }
+
+    const coincide = await bcrypt.compare(password, usuario.password);
+    if (!coincide) {
+        return res.status(401).json({ mensaje: 'Credenciales invalidas' });
+    }
+
+    const token = jwt.sign(
+        { id: usuario.id, rol: usuario.rol },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRA || '2h' }
+    );
+
+    res.json({
+        token,
+        usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol }
+    });
 }
 
 module.exports = { registro, login };

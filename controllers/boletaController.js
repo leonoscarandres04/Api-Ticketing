@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+const { pool } = require('../config/database');
 
 const validarBoleta = async (req, res) => {
     const { codigo } = req.body;
@@ -7,10 +7,10 @@ const validarBoleta = async (req, res) => {
         if (boletas.length === 0) return res.status(404).json({ error: 'Boleta no encontrada' });
 
         const boleta = boletas[0];
-        if (boleta.estado === 'USADA') return res.status(400).json({ error: 'Esta boleta ya fue usada' });
-        if (boleta.estado === 'ANULADA') return res.status(400).json({ error: 'Esta boleta ha sido anulada' });
+        if (boleta.estado === 'usada') return res.status(400).json({ error: 'Esta boleta ya fue usada' });
+        if (boleta.estado === 'anulada') return res.status(400).json({ error: 'Esta boleta ha sido anulada' });
 
-        await pool.query('UPDATE boletas SET estado = ? WHERE id = ?', ['USADA', boleta.id]);
+        await pool.query('UPDATE boletas SET estado = ? WHERE id = ?', ['usada', boleta.id]);
         res.json({ mensaje: 'Boleta validada correctamente. Acceso permitido.' });
     } catch (error) {
         res.status(500).json({ error: 'Error al validar la boleta' });
@@ -28,11 +28,13 @@ const anularBoleta = async (req, res) => {
         if (boletas.length === 0) throw new Error('Boleta no encontrada');
         
         const boleta = boletas[0];
-        if (boleta.estado === 'ANULADA') throw new Error('La boleta ya se encuentra anulada');
-        if (boleta.estado === 'USADA') throw new Error('No se puede anular una boleta usada');
+        if (boleta.estado === 'anulada') throw new Error('La boleta ya se encuentra anulada');
+        if (boleta.estado === 'usada') throw new Error('No se puede anular una boleta usada');
 
-        await connection.query('UPDATE boletas SET estado = ? WHERE id = ?', ['ANULADA', id]);
-        await connection.query('UPDATE eventos SET aforo = aforo + 1 WHERE id = ?', [boleta.evento_id]);
+        await connection.query('UPDATE boletas SET estado = ? WHERE id = ?', ['anulada', id]);
+        
+        // Devuelve el cupo al aforo disponible
+        await connection.query('UPDATE eventos SET aforo_disponible = aforo_disponible + 1 WHERE id = ?', [boleta.evento_id]);
 
         await connection.commit();
         res.json({ mensaje: 'Boleta anulada correctamente. Cupo devuelto al evento.' });

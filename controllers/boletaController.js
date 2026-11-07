@@ -1,45 +1,47 @@
-const Boleta = require('../models/boletaModel');
+const pool = require('../config/database');
 
-// GET /api/boletas?evento_id=1
-async function listar(req, res) {
-    const boletas = await Boleta.listar(req.query.evento_id);
-    res.json(boletas);
-}
+const validarBoleta = async (req, res) => {
+    const { codigo } = req.body;
+    try {
+        const [boletas] = await pool.query('SELECT id, estado FROM boletas WHERE codigo = ?', [codigo]);
+        if (boletas.length === 0) return res.status(404).json({ error: 'Boleta no encontrada' });
 
-// GET /api/boletas/:id
-async function obtener(req, res) {
-    const boleta = await Boleta.obtenerPorId(req.params.id);
-    if (!boleta) {
-        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
+        const boleta = boletas[0];
+        if (boleta.estado === 'USADA') return res.status(400).json({ error: 'Esta boleta ya fue usada' });
+        if (boleta.estado === 'ANULADA') return res.status(400).json({ error: 'Esta boleta ha sido anulada' });
+
+        await pool.query('UPDATE boletas SET estado = ? WHERE id = ?', ['USADA', boleta.id]);
+        res.json({ mensaje: 'Boleta validada correctamente. Acceso permitido.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al validar la boleta' });
     }
-    res.json(boleta);
-}
+};
 
-// PATCH /api/boletas/:id/anular
-async function anular(req, res) {
-    const boleta = await Boleta.obtenerPorId(req.params.id);
-    if (!boleta) {
-        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
+const anularBoleta = async (req, res) => {
+    const { id } = req.params;
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const [boletas] = await connection.query('SELECT evento_id, estado FROM boletas WHERE id = ? FOR UPDATE', [id]);
+        if (boletas.length === 0) throw new Error('Boleta no encontrada');
+        
+        const boleta = boletas[0];
+        if (boleta.estado === 'ANULADA') throw new Error('La boleta ya se encuentra anulada');
+        if (boleta.estado === 'USADA') throw new Error('No se puede anular una boleta usada');
+
+        await connection.query('UPDATE boletas SET estado = ? WHERE id = ?', ['ANULADA', id]);
+        await connection.query('UPDATE eventos SET aforo = aforo + 1 WHERE id = ?', [boleta.evento_id]);
+
+        await connection.commit();
+        res.json({ mensaje: 'Boleta anulada correctamente. Cupo devuelto al evento.' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(400).json({ error: error.message });
+    } finally {
+        connection.release();
     }
-    // TODO: al anular, devolver el cupo al aforo_disponible del evento
-    const actualizado = await Boleta.actualizarEstado(req.params.id, 'anulada');
-    res.json(actualizado);
-}
+};
 
-// DELETE /api/boletas/:id
-async function eliminar(req, res) {
-    const eliminado = await Boleta.eliminar(req.params.id);
-    if (!eliminado) {
-        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
-    }
-    res.status(204).send();
-}
-
-// POST /api/boletas/validar
-async function validar(req, res) {
-    // TODO (validacion): buscar la boleta por codigo, revisar que este 'valida',
-    // marcarla como 'usada' con la fecha (usada_en) y rechazar si ya fue usada o anulada
-    res.status(501).json({ mensaje: 'Pendiente: validacion de boletas' });
-}
-
-module.exports = { listar, obtener, anular, eliminar, validar };
+module.exports = { validarBoleta, anularBoleta };

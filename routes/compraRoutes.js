@@ -115,5 +115,6 @@ router.get('/:id', verificarToken, compraController.obtener);
  *       409: { description: La compra ya fue pagada o cancelada }
  */
 router.post('/:id/pagar', verificarToken, permitirRoles('comprador'), compraController.pagar);
+router.patch('/:id/pagar', verificarToken, permitirRoles('comprador'), compraController.pagar);
 
 module.exports = router;

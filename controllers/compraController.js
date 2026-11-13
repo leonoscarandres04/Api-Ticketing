@@ -3,12 +3,11 @@ const { v4: uuidv4 } = require('uuid');
 const Compra = require('../models/compraModel');
 
 // GET /api/compras
-const listar = async (req, res) => {
-    if (req.query.comprador_id) {
-        const compras = await Compra.listarPorComprador(req.query.comprador_id);
-        return res.json(compras);
-    }
-    const compras = await Compra.listar();
+async function listar(req, res) {
+    // El organizador ve todas; el comprador solo las suyas
+    const compras = req.usuario.rol === 'comprador'
+        ? await Compra.listarPorComprador(req.usuario.id)
+        : await Compra.listar();
     res.json(compras);
 };
 
@@ -17,6 +16,9 @@ const obtener = async (req, res) => {
     const compra = await Compra.obtenerPorId(req.params.id);
     if (!compra) {
         return res.status(404).json({ mensaje: 'Compra no encontrada' });
+    }
+    if (req.usuario.rol === 'comprador' && compra.comprador_id !== req.usuario.id) {
+        return res.status(403).json({ mensaje: 'No puedes ver compras de otro usuario' });
     }
     res.json(compra);
 };

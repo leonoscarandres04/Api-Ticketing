@@ -19,6 +19,13 @@ async function obtenerPorEmail(email) {
     return filas[0];
 }
 
-// TODO (autenticacion): crear(usuario) recibiendo la password ya encriptada con bcrypt
+// Recibe la password ya encriptada con bcrypt
+async function crear({ nombre, email, password, rol }) {
+    const [resultado] = await pool.query(
+        'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)',
+        [nombre, email, password, rol]
+    );
+    return obtenerPorId(resultado.insertId);
+}
 
-module.exports = { listar, obtenerPorId, obtenerPorEmail };
+module.exports = { listar, obtenerPorId, obtenerPorEmail, crear };

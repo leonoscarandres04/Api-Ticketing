@@ -49,6 +49,8 @@ const router = Router();
  *   post:
  *     tags: [Eventos]
  *     summary: Crea un evento (organizador)
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -57,6 +59,8 @@ const router = Router();
  *     responses:
  *       201: { description: Evento creado }
  *       400: { description: Datos invalidos }
+ *       401: { description: Token requerido o invalido }
+ *       403: { description: Solo el organizador puede crear eventos }
  */
 router.get('/', eventoController.listar);
 router.post('/', verificarToken, permitirRoles('organizador'), eventoController.crear);
@@ -78,18 +82,26 @@ router.post('/', verificarToken, permitirRoles('organizador'), eventoController.
  *   put:
  *     tags: [Eventos]
  *     summary: Actualiza un evento (organizador)
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       content:
  *         application/json:
  *           schema: { $ref: '#/components/schemas/EventoNuevo' }
  *     responses:
  *       200: { description: Evento actualizado }
+ *       401: { description: Token requerido o invalido }
+ *       403: { description: Solo el organizador puede editar }
  *       404: { description: Evento no encontrado }
  *   delete:
  *     tags: [Eventos]
  *     summary: Elimina un evento (organizador)
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       204: { description: Evento eliminado }
+ *       401: { description: Token requerido o invalido }
+ *       403: { description: Solo el organizador puede eliminar }
  *       404: { description: Evento no encontrado }
  */
 router.get('/:id', eventoController.obtener);

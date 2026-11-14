@@ -30,7 +30,7 @@ const router = Router();
  * /api/boletas:
  *   get:
  *     tags: [Boletas]
- *     summary: Lista las boletas (se puede filtrar por evento)
+ *     summary: Lista las boletas (el comprador ve las suyas y el organizador las de sus eventos)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -66,9 +66,9 @@ router.get('/', verificarToken, boletaController.listar);
  *       200: { description: Boleta valida, queda marcada como usada }
  *       400: { description: Falta el codigo }
  *       401: { description: Token requerido o invalido }
- *       403: { description: Solo el organizador puede validar }
+ *       403: { description: Solo el organizador del evento puede validar }
  *       404: { description: Boleta no encontrada }
- *       409: { description: La boleta ya fue usada o esta anulada }
+ *       409: { description: La boleta ya fue usada, esta anulada, no esta pagada o el evento no esta activo }
  */
 router.post('/validar', verificarToken, permitirRoles('organizador'), boletaController.validar);
 
@@ -101,7 +101,7 @@ router.post('/validar', verificarToken, permitirRoles('organizador'), boletaCont
  *     responses:
  *       204: { description: Boleta eliminada }
  *       401: { description: Token requerido o invalido }
- *       403: { description: Solo el organizador puede eliminar }
+ *       403: { description: Solo el organizador del evento puede eliminar }
  *       404: { description: Boleta no encontrada }
  */
 router.get('/:id', verificarToken, boletaController.obtener);
@@ -127,7 +127,7 @@ router.delete('/:id', verificarToken, permitirRoles('organizador'), boletaContro
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Boleta' }
  *       401: { description: Token requerido o invalido }
- *       403: { description: Solo el organizador puede anular }
+ *       403: { description: Solo el organizador del evento puede anular }
  *       404: { description: Boleta no encontrada }
  */
 router.patch('/:id/anular', verificarToken, permitirRoles('organizador'), boletaController.anular);

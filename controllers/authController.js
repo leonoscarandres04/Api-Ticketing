@@ -1,15 +1,30 @@
 // Autenticacion con JWT
 const bcrypt = require('bcrypt');
-const Usuario = require('../models/usuarioModel');
 const jwt = require('jsonwebtoken');
+const Usuario = require('../models/usuarioModel');
 
 const ROLES = ['organizador', 'comprador'];
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // POST /api/auth/registro
 async function registro(req, res) {
-    const { nombre, email, password, rol = 'comprador' } = req.body;
-    if (!nombre || !email || !password) {
-        return res.status(400).json({ mensaje: 'nombre, email y password son obligatorios' });
+    const { email, password, rol = 'comprador' } = req.body || {};
+    let { nombre } = req.body || {};
+
+    // nombre, email y password deben ser texto (si llega un numero daria error 500)
+    if (typeof nombre !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ mensaje: 'nombre, email y password son obligatorios y deben ser texto' });
+    }
+
+    nombre = nombre.trim();
+    if (nombre.length === 0) {
+        return res.status(400).json({ mensaje: 'El nombre no puede estar vacio' });
+    }
+    if (nombre.length > 100) {
+        return res.status(400).json({ mensaje: 'El nombre no puede tener mas de 100 caracteres' });
+    }
+    if (email.length > 150 || !EMAIL_VALIDO.test(email)) {
+        return res.status(400).json({ mensaje: 'El email no tiene un formato valido' });
     }
     if (password.length < 6) {
         return res.status(400).json({ mensaje: 'La password debe tener minimo 6 caracteres' });
@@ -30,9 +45,9 @@ async function registro(req, res) {
 
 // POST /api/auth/login
 async function login(req, res) {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ mensaje: 'email y password son obligatorios' });
+    const { email, password } = req.body || {};
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+        return res.status(400).json({ mensaje: 'email y password son obligatorios y deben ser texto' });
     }
 
     const usuario = await Usuario.obtenerPorEmail(email);

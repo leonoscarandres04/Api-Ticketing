@@ -28,7 +28,7 @@ router.get('/', verificarToken, permitirRoles('organizador'), usuarioController.
  * /api/usuarios/{id}:
  *   get:
  *     tags: [Usuarios]
- *     summary: Obtiene un usuario por id
+ *     summary: Obtiene un usuario por id (el comprador solo puede ver el suyo)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -43,6 +43,7 @@ router.get('/', verificarToken, permitirRoles('organizador'), usuarioController.
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Usuario' }
  *       401: { description: Token requerido o invalido }
+ *       403: { description: Un comprador solo puede ver su propio usuario }
  *       404: { description: Usuario no encontrado }
  */
 router.get('/:id', verificarToken, usuarioController.obtener);

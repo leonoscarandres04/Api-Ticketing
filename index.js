@@ -13,6 +13,13 @@ const PORT = process.env.PORT || 3000;
 // Middleware para que la API entienda y reciba formato JSON
 app.use(express.json());
 
+// Si la peticion llega sin cuerpo, Express 5 deja req.body vacio (undefined);
+// se deja como objeto vacio para que los controladores respondan 400 y no 500
+app.use((req, res, next) => {
+    req.body ??= {};
+    next();
+});
+
 // Documentacion de la API
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

@@ -4,6 +4,14 @@ const { verificarToken, permitirRoles } = require('../middlewares/auth');
 
 const router = Router();
 
+// El id debe ser un numero entero; con "1abc" MySQL buscaria el evento 1
+router.param('id', (req, res, next, id) => {
+    if (!/^\d+$/.test(id)) {
+        return res.status(404).json({ mensaje: 'Evento no encontrado' });
+    }
+    next();
+});
+
 /**
  * @openapi
  * components:
@@ -23,9 +31,8 @@ const router = Router();
  *         estado: { type: string, enum: [activo, cancelado, finalizado] }
  *     EventoNuevo:
  *       type: object
- *       required: [organizador_id, nombre, lugar, fecha, aforo_total]
+ *       required: [nombre, lugar, fecha, aforo_total]
  *       properties:
- *         organizador_id: { type: integer, example: 1 }
  *         nombre: { type: string, example: Concierto de Rock }
  *         descripcion: { type: string, example: Bandas locales en vivo }
  *         lugar: { type: string, example: Teatro Jorge Eliecer Gaitan }

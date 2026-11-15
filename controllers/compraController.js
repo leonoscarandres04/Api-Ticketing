@@ -1,5 +1,5 @@
 const { pool } = require('../config/database');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const Compra = require('../models/compraModel');
 
 // GET /api/compras

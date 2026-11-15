@@ -4,6 +4,13 @@ const BASE = 'http://localhost:3000/api';
 const AFORO = 10;
 const COMPRADORES_SIMULTANEOS = 30;
 const VALIDACIONES_SIMULTANEAS = 10;
+// Fecha del evento: un mes despues de hoy, formato 'YYYY-MM-DD HH:MM:SS'
+function fechaFutura() {
+    const f = new Date();
+    f.setMonth(f.getMonth() + 1);
+    const dos = n => String(n).padStart(2, '0');
+    return `${f.getFullYear()}-${dos(f.getMonth() + 1)}-${dos(f.getDate())} 20:00:00`;
+}
 
 async function llamar(metodo, ruta, cuerpo, token) {
     const res = await fetch(BASE + ruta, {

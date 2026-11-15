@@ -63,7 +63,7 @@ async function main() {
         organizador_id: organizadorId,
         nombre: 'Evento prueba concurrencia',
         lugar: 'Bogota',
-        fecha: '2026-12-30 20:00:00',
+        fecha: fechaFutura(),
         aforo_total: AFORO,
         precio: 10000
     }, tokenOrg);

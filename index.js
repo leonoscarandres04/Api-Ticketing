@@ -4,6 +4,7 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const { probarConexion } = require('./config/database');
+const Compra = require('./models/compraModel');
 const rutas = require('./routes');
 const { rutaNoEncontrada, manejarErrores } = require('./middlewares/errores');
 
@@ -29,6 +30,16 @@ app.use('/api', rutas);
 // Manejo de rutas inexistentes y errores
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);
+
+// Cada minuto se cancelan las compras que no se pagaron a tiempo y se devuelven sus cupos
+setInterval(async () => {
+    try {
+        const liberados = await Compra.liberarTodasLasVencidas();
+        if (liberados > 0) console.log(`Se liberaron ${liberados} cupos de compras vencidas`);
+    } catch (error) {
+        console.error('No se pudieron liberar las compras vencidas:', error.code || error.message);
+    }
+}, 60 * 1000);
 
 app.listen(PORT, async () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

@@ -43,9 +43,9 @@ const crearCompra = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Bloquear evento y revisar existencia, estado y aforo_disponible
+        // 1. Bloquear evento y revisar existencia, estado, fecha y aforo_disponible
         const [eventos] = await connection.query(
-            'SELECT aforo_disponible, precio, estado FROM eventos WHERE id = ? FOR UPDATE',
+            'SELECT aforo_disponible, precio, estado, fecha <= NOW() AS ya_paso FROM eventos WHERE id = ? FOR UPDATE',
             [evento_id]
         );
 
@@ -60,6 +60,14 @@ const crearCompra = async (req, res) => {
             await connection.rollback();
             return res.status(409).json({ mensaje: `No se pueden realizar compras para un evento ${evento.estado}` });
         }
+
+        if (evento.ya_paso) {
+            await connection.rollback();
+            return res.status(409).json({ mensaje: 'El evento ya paso, no se pueden comprar boletas' });
+        }
+
+        // Antes de revisar el aforo se liberan los cupos de las compras que no se pagaron a tiempo
+        evento.aforo_disponible += await Compra.liberarVencidas(connection, evento_id);
 
         if (evento.aforo_disponible < cantidad) {
             await connection.rollback();
@@ -126,19 +134,27 @@ const pagarCompra = async (req, res) => {
         return res.status(403).json({ mensaje: 'No tienes permiso para pagar la compra de otro comprador' });
     }
 
-    if (compra.estado === 'pagada') {
+    // Se paga en un solo paso y solo si sigue pendiente y no se ha vencido, asi varios
+    // pagos al mismo tiempo de la misma compra no pueden pasar todos
+    const [resultado] = await pool.query(
+        `UPDATE compras SET estado = 'pagada'
+         WHERE id = ? AND estado = 'pendiente' AND creado_en >= NOW() - INTERVAL ${Compra.MINUTOS_PARA_PAGAR} MINUTE`,
+        [id]
+    );
+    if (resultado.affectedRows === 1) {
+        return res.json({ mensaje: 'Pago simulado procesado correctamente' });
+    }
+
+    // No se pago: se revisa por que
+    const actual = await Compra.obtenerPorId(id);
+    if (actual.estado === 'pagada') {
         return res.status(409).json({ mensaje: 'Esta compra ya fue pagada' });
     }
-    if (compra.estado === 'cancelada') {
-        return res.status(409).json({ mensaje: 'No se puede pagar una compra cancelada' });
+    if (actual.estado === 'pendiente') {
+        // Sigue pendiente pero ya se vencio: se cancela y se devuelven los cupos
+        await Compra.liberarVencidasDeEvento(actual.evento_id);
     }
-
-    await pool.query(
-        'UPDATE compras SET estado = ? WHERE id = ?',
-        ['pagada', id]
-    );
-
-    res.json({ mensaje: 'Pago simulado procesado correctamente' });
+    res.status(409).json({ mensaje: `La compra vencio: tenias ${Compra.MINUTOS_PARA_PAGAR} minutos para pagarla` });
 };
 
 module.exports = {

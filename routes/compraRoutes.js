@@ -61,7 +61,7 @@ const router = Router();
  *       401: { description: Token requerido o invalido }
  *       403: { description: Solo el comprador puede comprar }
  *       404: { description: Evento no encontrado }
- *       409: { description: No hay aforo suficiente o el evento no esta activo }
+ *       409: { description: No hay aforo suficiente, el evento no esta activo o ya paso }
  */
 router.get('/', verificarToken, compraController.listar);
 router.post('/', verificarToken, permitirRoles('comprador'), compraController.crear);
@@ -95,7 +95,7 @@ router.get('/:id', verificarToken, compraController.obtener);
  * /api/compras/{id}/pagar:
  *   post:
  *     tags: [Compras]
- *     summary: Paga la compra (pago simulado) (comprador)
+ *     summary: Paga la compra (pago simulado); hay 15 minutos para pagar o la compra vence (comprador)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -112,7 +112,7 @@ router.get('/:id', verificarToken, compraController.obtener);
  *       401: { description: Token requerido o invalido }
  *       403: { description: Solo el comprador puede pagar }
  *       404: { description: Compra no encontrada }
- *       409: { description: La compra ya fue pagada o cancelada }
+ *       409: { description: La compra ya fue pagada o vencio (pasaron mas de 15 minutos) }
  */
 router.post('/:id/pagar', verificarToken, permitirRoles('comprador'), compraController.pagar);
 router.patch('/:id/pagar', verificarToken, permitirRoles('comprador'), compraController.pagar);

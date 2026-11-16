@@ -95,7 +95,7 @@ router.post('/validar', verificarToken, permitirRoles('organizador'), boletaCont
  *       404: { description: Boleta no encontrada }
  *   delete:
  *     tags: [Boletas]
- *     summary: Elimina una boleta (organizador)
+ *     summary: Elimina una boleta y devuelve el cupo si estaba valida (organizador)
  *     security:
  *       - bearerAuth: []
  *     responses:

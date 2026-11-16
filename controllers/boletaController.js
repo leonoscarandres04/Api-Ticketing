@@ -37,8 +37,32 @@ const eliminar = async (req, res) => {
     if (boleta.organizador_id !== req.usuario.id) {
         return res.status(403).json({ mensaje: 'Solo el organizador del evento puede eliminar sus boletas' });
     }
-    await Boleta.eliminar(req.params.id);
-    res.status(204).send();
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        // Se bloquea primero el evento y luego la boleta, en el mismo orden que la compra
+        await connection.query('SELECT id FROM eventos WHERE id = ? FOR UPDATE', [boleta.evento_id]);
+        const [filas] = await connection.query('SELECT estado FROM boletas WHERE id = ? FOR UPDATE', [req.params.id]);
+        if (filas.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ mensaje: 'Boleta no encontrada' });
+        }
+
+        await connection.query('DELETE FROM boletas WHERE id = ?', [req.params.id]);
+        // Si la boleta seguia valida, su cupo vuelve al evento
+        if (filas[0].estado === 'valida') {
+            await connection.query('UPDATE eventos SET aforo_disponible = aforo_disponible + 1 WHERE id = ?', [boleta.evento_id]);
+        }
+
+        await connection.commit();
+        res.status(204).send();
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
 };
 
 // POST /api/boletas/validar
@@ -48,30 +72,45 @@ const validarBoleta = async (req, res) => {
         return res.status(400).json({ mensaje: 'El codigo de la boleta es obligatorio' });
     }
 
-    // Se marca como usada en un solo paso y solo si sigue 'valida', la compra esta pagada,
-    // el evento esta activo y es de este organizador. Asi dos validaciones al mismo tiempo
-    // no pueden dejar entrar con la misma boleta
-    const [resultado] = await pool.query(
-        `UPDATE boletas b
-         JOIN compras c ON c.id = b.compra_id
-         JOIN eventos e ON e.id = b.evento_id
-         SET b.estado = 'usada', b.usada_en = NOW()
-         WHERE b.codigo = ? AND b.estado = 'valida' AND c.estado = 'pagada'
-           AND e.estado = 'activo' AND e.organizador_id = ?`,
-        [codigo, req.usuario.id]
-    );
-    if (resultado.affectedRows === 1) {
+    const encontrada = await Boleta.obtenerPorCodigo(codigo);
+    if (!encontrada) {
+        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
+    }
+    if (encontrada.organizador_id !== req.usuario.id) {
+        return res.status(403).json({ mensaje: 'Esta boleta es de un evento de otro organizador' });
+    }
+
+    const connection = await pool.getConnection();
+    let marcada;
+    try {
+        await connection.beginTransaction();
+        // Se bloquea primero el evento, en el mismo orden que la compra y la anulacion
+        await connection.query('SELECT id FROM eventos WHERE id = ? FOR UPDATE', [encontrada.evento_id]);
+        // Se marca como usada en un solo paso y solo si sigue 'valida', la compra esta pagada
+        // y el evento esta activo. Asi dos validaciones al mismo tiempo no pueden dejar
+        // entrar con la misma boleta
+        const [resultado] = await connection.query(
+            `UPDATE boletas b
+             JOIN compras c ON c.id = b.compra_id
+             JOIN eventos e ON e.id = b.evento_id
+             SET b.estado = 'usada', b.usada_en = NOW()
+             WHERE b.id = ? AND b.estado = 'valida' AND c.estado = 'pagada' AND e.estado = 'activo'`,
+            [encontrada.id]
+        );
+        await connection.commit();
+        marcada = resultado.affectedRows === 1;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+    if (marcada) {
         return res.json({ mensaje: 'Boleta validada correctamente. Acceso permitido.' });
     }
 
-    // No se marco: se busca el motivo para responder
+    // No se marco: se busca el motivo con los datos actualizados
     const boleta = await Boleta.obtenerPorCodigo(codigo);
-    if (!boleta) {
-        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
-    }
-    if (boleta.organizador_id !== req.usuario.id) {
-        return res.status(403).json({ mensaje: 'Esta boleta es de un evento de otro organizador' });
-    }
     if (boleta.estado === 'anulada') {
         return res.status(409).json({ mensaje: 'Esta boleta ha sido anulada' });
     }
@@ -87,27 +126,28 @@ const validarBoleta = async (req, res) => {
 // PATCH /api/boletas/:id/anular
 const anularBoleta = async (req, res) => {
     const { id } = req.params;
+    const datos = await Boleta.obtenerPorId(id);
+    if (!datos) {
+        return res.status(404).json({ mensaje: 'Boleta no encontrada' });
+    }
+    if (datos.organizador_id !== req.usuario.id) {
+        return res.status(403).json({ mensaje: 'Solo el organizador del evento puede anular sus boletas' });
+    }
+
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        const [boletas] = await connection.query(
-            `SELECT b.evento_id, b.estado, e.organizador_id
-             FROM boletas b JOIN eventos e ON e.id = b.evento_id
-             WHERE b.id = ? FOR UPDATE`,
-            [id]
-        );
+        // Se bloquea primero el evento y luego la boleta, en el mismo orden que la compra
+        await connection.query('SELECT id FROM eventos WHERE id = ? FOR UPDATE', [datos.evento_id]);
+        const [boletas] = await connection.query('SELECT evento_id, estado FROM boletas WHERE id = ? FOR UPDATE', [id]);
         if (boletas.length === 0) {
             await connection.rollback();
             return res.status(404).json({ mensaje: 'Boleta no encontrada' });
         }
 
         const boleta = boletas[0];
-        if (boleta.organizador_id !== req.usuario.id) {
-            await connection.rollback();
-            return res.status(403).json({ mensaje: 'Solo el organizador del evento puede anular sus boletas' });
-        }
         if (boleta.estado === 'anulada') {
             await connection.rollback();
             return res.status(409).json({ mensaje: 'La boleta ya se encuentra anulada' });

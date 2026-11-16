@@ -15,6 +15,10 @@ function manejarErrores(err, req, res, next) {
     if (err.code === 'ECONNREFUSED') {
         return res.status(503).json({ mensaje: 'La base de datos no esta disponible' });
     }
+    // Dos operaciones se cruzaron sobre los mismos datos y MySQL cancelo una
+    if (err.code === 'ER_LOCK_DEADLOCK' || err.code === 'ER_LOCK_WAIT_TIMEOUT') {
+        return res.status(409).json({ mensaje: 'Hubo muchas operaciones al mismo tiempo, intenta de nuevo' });
+    }
     if (err.code === 'ER_DUP_ENTRY') {
         return res.status(409).json({ mensaje: 'El registro ya existe' });
     }

@@ -4,8 +4,8 @@
     --texto: #1f2430;
     --suave: #6b7280;
     --borde: #e3e7ef;
-    --primario: #5b4bdb;
-    --primario-oscuro: #4637b8;
+    --primario: #1d5fd1;
+    --primario-oscuro: #164aa6;
     --exito: #1f9d55;
     --peligro: #d64545;
     --alerta: #c98a06;
@@ -153,6 +153,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); 
     text-align: center;
     min-width: 130px;
 }
+.escaner video { display: block; width: 100%; max-height: 320px; margin-top: 12px; border-radius: 10px; background: #000; object-fit: cover; }
+.escaner .dato { text-align: center; }
+.boleta .qr { width: 130px; margin: 0 auto 6px; }
+.boleta .qr:empty { display: none; }
+.boleta .qr svg { display: block; width: 100%; height: auto; }
 .boleta .codigo { font-family: ui-monospace, Consolas, monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 1px; }
 
 /* Tablas */

@@ -24,6 +24,9 @@ app.use((req, res, next) => {
 
 // Pagina web (frontend) en la carpeta public
 app.use(express.static(path.join(__dirname, 'public')));
+// Librerias para dibujar el QR de las boletas y para leerlo con la camara en la entrada
+app.get('/js/qrcode.js', (req, res) => res.sendFile(require.resolve('qrcode-generator')));
+app.get('/js/jsqr.js', (req, res) => res.sendFile(require.resolve('jsqr')));
 
 // Documentacion de la API
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

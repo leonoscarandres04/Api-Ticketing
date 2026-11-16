@@ -30,6 +30,65 @@ function avisar(mensaje, tipo = 'ok') {
     temporizadorAviso = setTimeout(() => aviso.classList.add('oculto'), 3500);
 }
 
+// Dibuja el codigo QR (SVG) con el codigo de la boleta, para escanearlo en la entrada
+function codigoQR(texto) {
+    const qr = qrcode(0, 'M');
+    qr.addData(texto);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+}
+
+// ---------- Escaner de QR con la camara ----------
+
+const escaner = { stream: null, activo: false };
+
+// Prende la camara y revisa cada cuadro del video hasta encontrar un QR
+async function iniciarEscaner(video, alLeer) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('sin-camara');
+    }
+    // 'environment' pide la camara trasera en el celular
+    escaner.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = escaner.stream;
+    await video.play();
+    escaner.activo = true;
+
+    const lienzo = document.createElement('canvas');
+    const contexto = lienzo.getContext('2d', { willReadFrequently: true });
+    const revisar = () => {
+        if (!escaner.activo) return;
+        if (video.readyState >= video.HAVE_ENOUGH_DATA) {
+            lienzo.width = video.videoWidth;
+            lienzo.height = video.videoHeight;
+            contexto.drawImage(video, 0, 0);
+            const imagen = contexto.getImageData(0, 0, lienzo.width, lienzo.height);
+            const qr = jsQR(imagen.data, imagen.width, imagen.height);
+            if (qr && qr.data) {
+                alLeer(qr.data);
+                return;
+            }
+        }
+        requestAnimationFrame(revisar);
+    };
+    requestAnimationFrame(revisar);
+}
+
+function detenerEscaner() {
+    escaner.activo = false;
+    if (escaner.stream) {
+        escaner.stream.getTracks().forEach((pista) => pista.stop());
+        escaner.stream = null;
+    }
+}
+
+function mensajeCamara(error) {
+    if (error.name === 'NotAllowedError') return 'No diste permiso para usar la cámara. Actívalo en el candado de la barra de direcciones.';
+    if (error.name === 'NotFoundError') return 'No se encontró ninguna cámara en este equipo.';
+    if (error.name === 'NotReadableError') return 'La cámara está siendo usada por otra aplicación.';
+    if (error.message === 'sin-camara') return 'Este navegador no permite usar la cámara aquí. Ábrelo en http://localhost:3000.';
+    return 'No se pudo prender la cámara.';
+}
+
 function cargando() {
     app.innerHTML = '<p class="vacio">Cargando...</p>';
 }
@@ -202,8 +261,9 @@ async function pantallaEventos() {
             boton.disabled = true;
             try {
                 const compra = await api('POST', '/compras', { evento_id: Number(form.dataset.evento), cantidad });
-                avisar(`Compra exitosa: ${compra.boletas_generadas.length} boleta(s) por ${pesos(compra.total)}. Págala en "Mis compras".`);
-                pantallaEventos();
+                avisar(`Compra exitosa: ${compra.boletas_generadas.length} boleta(s) por ${pesos(compra.total)}. Tienes 15 minutos para pagarla.`);
+                // Despues de comprar, lo siguiente es pagar: se lleva a "Mis compras"
+                location.hash = '#/compras';
             } catch (error) {
                 avisar(error.message, 'mal');
                 boton.disabled = false;
@@ -242,10 +302,13 @@ async function pantallaCompras() {
                     <div class="boletas">
                         ${suyas.map((b) => `
                             <div class="boleta">
+                                <div class="qr">${b.estado === 'valida' ? codigoQR(b.codigo) : ''}</div>
                                 <div class="codigo">${texto(b.codigo)}</div>
                                 <span class="etiqueta ${b.estado}">${b.estado}</span>
                             </div>`).join('')}
-                    </div>` : '<p class="dato">Paga la compra para ver los códigos de tus boletas.</p>'}
+                    </div>` : compra.estado === 'cancelada'
+                        ? '<p class="dato">Esta compra venció porque no se pagó en 15 minutos.</p>'
+                        : '<p class="dato">Tienes 15 minutos para pagar; luego verás aquí los códigos de tus boletas.</p>'}
             </article>`;
     }).join('');
 
@@ -301,6 +364,11 @@ async function pantallaOrganizador() {
                     <input id="codigo" required placeholder="Ej: B03461E4" style="text-transform:uppercase">
                     <button class="boton ancho">Validar</button>
                 </form>
+                <button type="button" id="btn-escanear" class="boton secundario ancho">📷 Escanear QR con la cámara</button>
+                <div id="escaner" class="escaner oculto">
+                    <video id="video" playsinline muted></video>
+                    <p class="dato">Apunta la cámara al código QR de la boleta.</p>
+                </div>
                 <div id="resultado-validar"></div>
             </section>
 
@@ -343,17 +411,50 @@ async function pantallaOrganizador() {
 
         <section id="boletas-evento"></section>`;
 
-    // Validar boleta
-    document.getElementById('form-validar').onsubmit = async (e) => {
-        e.preventDefault();
-        const campo = document.getElementById('codigo');
-        const resultado = document.getElementById('resultado-validar');
+    // Validar boleta (escribiendo el codigo o escaneando el QR)
+    const campo = document.getElementById('codigo');
+    const resultado = document.getElementById('resultado-validar');
+    const botonEscanear = document.getElementById('btn-escanear');
+    const cajaEscaner = document.getElementById('escaner');
+
+    async function validarCodigo(codigo) {
         try {
-            const respuesta = await api('POST', '/boletas/validar', { codigo: campo.value.trim().toUpperCase() });
-            resultado.innerHTML = `<div class="resultado ok">✔ ${texto(respuesta.mensaje)}</div>`;
+            const respuesta = await api('POST', '/boletas/validar', { codigo: codigo.trim().toUpperCase() });
+            resultado.innerHTML = `<div class="resultado ok">✔ ${texto(codigo)}: ${texto(respuesta.mensaje)}</div>`;
             campo.value = '';
         } catch (error) {
-            resultado.innerHTML = `<div class="resultado mal">✖ ${texto(error.message)}</div>`;
+            resultado.innerHTML = `<div class="resultado mal">✖ ${texto(codigo)}: ${texto(error.message)}</div>`;
+        }
+    }
+
+    function cerrarEscaner() {
+        detenerEscaner();
+        cajaEscaner.classList.add('oculto');
+        botonEscanear.textContent = '📷 Escanear QR con la cámara';
+    }
+
+    document.getElementById('form-validar').onsubmit = (e) => {
+        e.preventDefault();
+        validarCodigo(campo.value);
+    };
+
+    botonEscanear.onclick = async () => {
+        if (escaner.activo) {
+            cerrarEscaner();
+            return;
+        }
+        resultado.innerHTML = '';
+        cajaEscaner.classList.remove('oculto');
+        botonEscanear.textContent = '✖ Cerrar cámara';
+        try {
+            await iniciarEscaner(document.getElementById('video'), (codigo) => {
+                cerrarEscaner();
+                campo.value = codigo;
+                validarCodigo(codigo);
+            });
+        } catch (error) {
+            cerrarEscaner();
+            resultado.innerHTML = `<div class="resultado mal">✖ ${texto(mensajeCamara(error))}</div>`;
         }
     };
 
@@ -458,6 +559,8 @@ const pantallas = {
 };
 
 async function navegar() {
+    // Si se cambia de pantalla con la camara prendida, se apaga
+    detenerEscaner();
     if (!pantallas[location.hash]) {
         location.hash = '#/eventos';
         return;

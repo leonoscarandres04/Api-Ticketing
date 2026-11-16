@@ -1,5 +1,6 @@
 require('dotenv').config({ quiet: true });
 
+const path = require('path');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
@@ -20,6 +21,9 @@ app.use((req, res, next) => {
     req.body ??= {};
     next();
 });
+
+// Pagina web (frontend) en la carpeta public
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Documentacion de la API
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -43,6 +47,7 @@ setInterval(async () => {
 
 app.listen(PORT, async () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`Pagina web en http://localhost:${PORT}`);
     console.log(`Documentacion en http://localhost:${PORT}/api-docs`);
     try {
         await probarConexion();

@@ -1,0 +1,187 @@
+:root {
+    --fondo: #f4f6fb;
+    --tarjeta: #ffffff;
+    --texto: #1f2430;
+    --suave: #6b7280;
+    --borde: #e3e7ef;
+    --primario: #5b4bdb;
+    --primario-oscuro: #4637b8;
+    --exito: #1f9d55;
+    --peligro: #d64545;
+    --alerta: #c98a06;
+    --radio: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+}
+
+/* Barra superior */
+.barra {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px 24px;
+    background: var(--primario);
+    color: #fff;
+}
+.logo { color: #fff; font-size: 1.3rem; font-weight: 700; text-decoration: none; }
+#menu { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#menu a, #menu button {
+    color: #fff;
+    background: transparent;
+    border: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+#menu a:hover, #menu button:hover, #menu a.activo { background: rgba(255, 255, 255, .18); }
+#menu .usuario { opacity: .85; font-size: .9rem; padding: 0 8px; }
+
+.contenedor { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+
+h1 { margin: 0 0 4px; font-size: 1.6rem; }
+h2 { margin: 0 0 12px; font-size: 1.15rem; }
+.subtitulo { color: var(--suave); margin: 0 0 24px; }
+
+/* Tarjetas */
+.tarjeta {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    padding: 20px;
+}
+.rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .dos-columnas { grid-template-columns: 1fr; } }
+.pila > * + * { margin-top: 16px; }
+
+/* Eventos */
+.evento h2 { margin-bottom: 4px; }
+.evento .dato { color: var(--suave); font-size: .92rem; margin: 2px 0; }
+.precio { font-size: 1.25rem; font-weight: 700; margin: 12px 0 8px; }
+.aforo { height: 8px; background: var(--borde); border-radius: 99px; overflow: hidden; margin: 6px 0; }
+.aforo > div { height: 100%; background: var(--exito); }
+.aforo.poco > div { background: var(--alerta); }
+.aforo.agotado > div { background: var(--peligro); }
+.comprar { display: flex; gap: 8px; margin-top: 12px; }
+.comprar input { width: 80px; }
+
+/* Formularios */
+label { display: block; font-size: .9rem; font-weight: 600; margin: 12px 0 4px; }
+input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    font: inherit;
+    background: #fff;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); border-color: transparent; }
+.fila { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.fila > * { min-width: 0; }
+
+/* Botones */
+.boton {
+    display: inline-block;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--primario);
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+.boton:hover { background: var(--primario-oscuro); }
+.boton:disabled { opacity: .5; cursor: not-allowed; }
+.boton.secundario { background: #fff; color: var(--primario); border: 1px solid var(--primario); }
+.boton.peligro { background: var(--peligro); }
+.boton.exito { background: var(--exito); }
+.boton.chico { padding: 6px 10px; font-size: .85rem; }
+.boton.ancho { width: 100%; margin-top: 16px; }
+
+/* Pestañas del login */
+.pestanas { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid var(--borde); }
+.pestanas button {
+    flex: 1;
+    padding: 10px;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 600;
+    color: var(--suave);
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+}
+.pestanas button.activo { color: var(--primario); border-bottom-color: var(--primario); }
+.login { max-width: 420px; margin: 24px auto; }
+.ayuda { font-size: .85rem; color: var(--suave); margin-top: 16px; }
+
+/* Estados */
+.etiqueta {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: .8rem;
+    font-weight: 600;
+    background: var(--borde);
+}
+.etiqueta.pagada, .etiqueta.valida, .etiqueta.activo { background: #dcf5e7; color: var(--exito); }
+.etiqueta.pendiente, .etiqueta.usada { background: #fdf1d6; color: var(--alerta); }
+.etiqueta.cancelada, .etiqueta.anulada, .etiqueta.cancelado { background: #fbe2e2; color: var(--peligro); }
+.etiqueta.finalizado { background: var(--borde); color: var(--suave); }
+
+/* Compras y boletas */
+.compra-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.boletas { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.boleta {
+    border: 2px dashed var(--borde);
+    border-radius: 10px;
+    padding: 10px 14px;
+    text-align: center;
+    min-width: 130px;
+}
+.boleta .codigo { font-family: ui-monospace, Consolas, monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 1px; }
+
+/* Tablas */
+.tabla { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tabla th, .tabla td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--borde); }
+.tabla th { color: var(--suave); font-weight: 600; }
+.tabla .acciones { display: flex; gap: 6px; flex-wrap: wrap; }
+.desplazable { overflow-x: auto; }
+
+.resultado { margin-top: 12px; padding: 12px; border-radius: 8px; font-weight: 600; }
+.resultado.ok { background: #dcf5e7; color: var(--exito); }
+.resultado.mal { background: #fbe2e2; color: var(--peligro); }
+
+.vacio { text-align: center; color: var(--suave); padding: 32px; }
+
+/* Aviso flotante */
+.aviso {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: calc(100% - 32px);
+    padding: 12px 20px;
+    border-radius: 10px;
+    color: #fff;
+    background: var(--texto);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+    z-index: 10;
+}
+.aviso.ok { background: var(--exito); }
+.aviso.mal { background: var(--peligro); }
+.oculto { display: none; }

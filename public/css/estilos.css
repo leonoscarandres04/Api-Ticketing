@@ -1,5 +1,5 @@
 :root {
-    --fondo: #f4f6fb;
+    --fondo: #e9eef6;
     --tarjeta: #ffffff;
     --texto: #1f2430;
     --suave: #6b7280;
@@ -19,7 +19,24 @@ body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--fondo);
     color: var(--texto);
+    overflow-x: hidden;
 }
+
+/* Franja azul de arriba en Eventos, con el titulo y los filtros */
+.hero {
+    /* Ocupa todo el ancho de la pantalla aunque este dentro del contenedor */
+    margin: -24px calc(50% - 50vw) 28px;
+    padding: 40px calc(50vw - 50% + 16px) 32px;
+    background:
+        radial-gradient(circle at 85% 20%, rgba(255, 255, 255, .14), transparent 40%),
+        linear-gradient(135deg, var(--primario), #0b2a63);
+    color: #fff;
+}
+.hero h1 { font-size: 2rem; }
+.hero .subtitulo { color: rgba(255, 255, 255, .8); margin-bottom: 22px; }
+.hero .filtros { margin: 0; padding: 0; background: none; border: 0; }
+.hero .filtros input, .hero .filtros select { border-color: transparent; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.hero .casilla { color: #fff; }
 
 /* Barra superior */
 .barra {
@@ -65,9 +82,36 @@ h2 { margin: 0 0 12px; font-size: 1.15rem; }
 @media (max-width: 760px) { .dos-columnas { grid-template-columns: 1fr; } }
 .pila > * + * { margin-top: 16px; }
 
-/* Eventos */
-.evento h2 { margin-bottom: 4px; }
+/* Eventos (tarjeta con imagen arriba, al estilo de Eventbrite) */
+.evento { position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; border: 0; box-shadow: 0 2px 10px rgba(16, 24, 40, .07); transition: box-shadow .2s, transform .2s; }
+.evento:hover { box-shadow: 0 10px 28px rgba(16, 24, 40, .12); transform: translateY(-2px); }
+.evento-cuerpo { padding: 16px 18px 18px; display: flex; flex-direction: column; flex: 1; }
+.evento-cuerpo > :last-child { margin-top: auto; }
+.evento-fecha { color: var(--primario); font-weight: 700; font-size: .85rem; text-transform: uppercase; margin: 0 0 4px; }
+.evento h2 { margin-bottom: 6px; }
 .evento .dato { color: var(--suave); font-size: .92rem; margin: 2px 0; }
+.sobre-imagen { position: absolute; top: 12px; left: 12px; }
+
+/* Imagen del evento: si no hay imagen o no carga, queda el degradado con la inicial */
+.portada, .miniatura {
+    position: relative;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--primario), #0b2a63);
+    color: rgba(255, 255, 255, .9);
+    font-weight: 800;
+}
+.portada { aspect-ratio: 2 / 1; font-size: 3rem; }
+.miniatura { width: 96px; height: 72px; border-radius: 10px; font-size: 1.8rem; flex-shrink: 0; }
+.portada img, .miniatura img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Filtros */
+.filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px; padding: 14px; }
+.filtros input[type=search] { flex: 2 1 260px; }
+.filtros select { flex: 1 1 170px; width: auto; }
+.casilla { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 500; white-space: nowrap; }
+.casilla input { width: auto; }
 .precio { font-size: 1.25rem; font-weight: 700; margin: 12px 0 8px; }
 .aforo { height: 8px; background: var(--borde); border-radius: 99px; overflow: hidden; margin: 6px 0; }
 .aforo > div { height: 100%; background: var(--exito); }
@@ -78,15 +122,19 @@ h2 { margin: 0 0 12px; font-size: 1.15rem; }
 
 /* Formularios */
 label { display: block; font-size: .9rem; font-weight: 600; margin: 12px 0 4px; }
+/* Los campos tienen un fondo gris azulado y un borde marcado para que se distingan de la tarjeta blanca */
 input, select, textarea {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid var(--borde);
+    border: 1px solid #c3cddd;
     border-radius: 8px;
     font: inherit;
-    background: #fff;
+    background: #f3f6fb;
+    transition: background .15s, border-color .15s;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); border-color: transparent; }
+input:hover, select:hover, textarea:hover { border-color: #9fb0ca; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); border-color: transparent; background: #fff; }
+input::placeholder { color: #8a94a6; }
 .fila { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
 .fila > * { min-width: 0; }
 
@@ -144,7 +192,50 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primario); 
 .etiqueta.finalizado { background: var(--borde); color: var(--suave); }
 
 /* Compras y boletas */
-.compra-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.compra-cabecera { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.compra-info { flex: 1; min-width: 200px; }
+.compra-info h2 { margin-bottom: 4px; }
+.compra-acciones { display: flex; align-items: center; gap: 8px; }
+.compra .dato { color: var(--suave); }
+.contador { display: inline-block; margin: 14px 0 4px; padding: 8px 14px; border-radius: 8px; background: #e7efff; color: var(--primario); font-weight: 700; font-variant-numeric: tabular-nums; }
+.contador.urgente { background: #fdf1d6; color: var(--alerta); }
+.contador.vencido { background: #fbe2e2; color: var(--peligro); }
+.silla-boleta { font-size: .85rem; font-weight: 700; color: var(--primario); margin: 2px 0 4px; }
+
+/* Mapa de sillas */
+.cabecera-evento { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+.cabecera-evento h1 { margin-bottom: 4px; }
+.cabecera-evento .dato { color: var(--suave); margin: 2px 0; }
+.mapa-sillas { margin-bottom: 16px; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-bottom: 16px; font-size: .9rem; color: var(--suave); }
+.leyenda span { display: flex; align-items: center; gap: 6px; }
+.leyenda .silla { width: 20px; height: 20px; cursor: default; }
+.mapa { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: max-content; margin: 0 auto; padding: 4px; }
+.escenario {
+    width: 70%; min-width: 240px; margin-bottom: 18px; padding: 8px; text-align: center;
+    background: linear-gradient(180deg, #d9e2f2, #eef2f9); border-radius: 6px 6px 40px 40px;
+    color: var(--suave); font-size: .8rem; font-weight: 700; letter-spacing: 6px;
+}
+.fila-sillas { display: flex; align-items: center; gap: 5px; }
+.fila-sillas .letra { width: 18px; text-align: center; font-weight: 700; color: var(--suave); font-size: .85rem; }
+.silla {
+    display: inline-block; width: 30px; height: 30px; padding: 0;
+    border: 1px solid #b9c6dc; border-radius: 7px 7px 4px 4px; background: #fff;
+    font: inherit; font-size: .72rem; color: var(--texto); cursor: pointer;
+}
+.silla:hover:not(:disabled) { border-color: var(--primario); background: #e7efff; }
+.silla.elegida { background: var(--primario); border-color: var(--primario); color: #fff; }
+.silla[data-ocupada] { background: #d5dae3; border-color: #d5dae3; color: transparent; cursor: not-allowed; }
+.silla:disabled:not([data-ocupada]) { cursor: default; }
+.resumen-sillas { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.resumen-sillas .dato { color: var(--suave); margin: 4px 0 0; }
+.resumen-total { display: flex; align-items: center; gap: 16px; }
+.resumen-total .precio { margin: 0; }
+
+/* Formulario del organizador */
+.fila.mitades { grid-template-columns: 1fr 1fr; }
+.vista-imagen { margin-top: 8px; border-radius: 10px; overflow: hidden; color: var(--suave); font-size: .9rem; }
+.vista-imagen img { display: block; width: 100%; max-height: 160px; object-fit: cover; }
 .boletas { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .boleta {
     border: 2px dashed var(--borde);

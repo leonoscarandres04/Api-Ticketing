@@ -4,10 +4,12 @@ const { pool } = require('../config/database');
 
 // Boleta junto con su comprador, su organizador y el estado de la compra y del evento
 const CON_DUENOS = `
-    SELECT b.*, c.comprador_id, c.estado AS estado_compra, e.organizador_id, e.estado AS estado_evento
+    SELECT b.*, c.comprador_id, c.estado AS estado_compra, e.organizador_id, e.estado AS estado_evento,
+           s.fila, s.numero AS silla
     FROM boletas b
     JOIN compras c ON c.id = b.compra_id
-    JOIN eventos e ON e.id = b.evento_id`;
+    JOIN eventos e ON e.id = b.evento_id
+    LEFT JOIN sillas s ON s.boleta_id = b.id`;
 
 // El comprador solo ve sus boletas y el organizador solo las de sus eventos
 async function listar({ eventoId, compradorId, organizadorId } = {}) {

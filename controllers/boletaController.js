@@ -159,6 +159,8 @@ const anularBoleta = async (req, res) => {
 
         await connection.query('UPDATE boletas SET estado = ? WHERE id = ?', ['anulada', id]);
         await connection.query('UPDATE eventos SET aforo_disponible = aforo_disponible + 1 WHERE id = ?', [boleta.evento_id]);
+        // Si tenia silla, la silla vuelve a quedar libre
+        await connection.query('UPDATE sillas SET boleta_id = NULL WHERE boleta_id = ?', [id]);
 
         await connection.commit();
         res.json({ mensaje: 'Boleta anulada correctamente. Cupo devuelto al evento.' });

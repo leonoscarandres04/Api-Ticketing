@@ -28,6 +28,10 @@ CREATE TABLE eventos (
     aforo_disponible  INT NOT NULL,
     precio            DECIMAL(10, 2) NOT NULL DEFAULT 0,
     estado            ENUM('activo', 'cancelado', 'finalizado') NOT NULL DEFAULT 'activo',
+    imagen_url        VARCHAR(500) NULL,                  -- link de la imagen del evento
+    tipo              ENUM('general', 'numerado') NOT NULL DEFAULT 'general',  -- entrada general o sillas numeradas
+    filas             INT NULL,                           -- solo para sillas numeradas
+    sillas_por_fila   INT NULL,                           -- solo para sillas numeradas
     creado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_eventos_organizador FOREIGN KEY (organizador_id) REFERENCES usuarios(id),
     -- Evita la sobreventa desde la propia base de datos
@@ -61,11 +65,35 @@ CREATE TABLE boletas (
     CONSTRAINT fk_boletas_evento FOREIGN KEY (evento_id) REFERENCES eventos(id)
 );
 
+-- Sillas de los eventos numerados; boleta_id es la boleta que ocupa la silla (NULL = libre)
+CREATE TABLE sillas (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    evento_id   INT NOT NULL,
+    fila        VARCHAR(2) NOT NULL,
+    numero      INT NOT NULL,
+    boleta_id   INT NULL UNIQUE,
+    CONSTRAINT fk_sillas_evento FOREIGN KEY (evento_id) REFERENCES eventos(id) ON DELETE CASCADE,
+    CONSTRAINT fk_sillas_boleta FOREIGN KEY (boleta_id) REFERENCES boletas(id) ON DELETE SET NULL,
+    CONSTRAINT uq_silla UNIQUE (evento_id, fila, numero)
+);
+
 -- Datos de prueba (password de ambos: 123456, encriptada con bcrypt)
 INSERT INTO usuarios (nombre, email, password, rol) VALUES
 ('Organizador Demo', 'organizador@ticketing.com', '$2b$10$TeBQKySVHH/RWCGls.Hjhe356gWeQW1M7FWUGdGwbuucraAsksR0C', 'organizador'),
 ('Comprador Demo',   'comprador@ticketing.com',   '$2b$10$TeBQKySVHH/RWCGls.Hjhe356gWeQW1M7FWUGdGwbuucraAsksR0C', 'comprador');
 
-INSERT INTO eventos (organizador_id, nombre, descripcion, lugar, fecha, aforo_total, aforo_disponible, precio) VALUES
-(1, 'Concierto de Rock', 'Bandas locales en vivo', 'Teatro Jorge Eliecer Gaitan', '2026-12-05 19:00:00', 100, 100, 50000),
-(1, 'Partido de Futbol', 'Clasico capitalino',     'Estadio El Campin',           '2026-12-12 16:00:00', 500, 500, 80000);
+INSERT INTO eventos (organizador_id, nombre, descripcion, lugar, fecha, aforo_total, aforo_disponible, precio, imagen_url) VALUES
+(1, 'Concierto de Rock', 'Bandas locales en vivo', 'Teatro Jorge Eliecer Gaitan', '2026-12-05 19:00:00', 100, 100, 50000,
+    'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800&q=70'),
+(1, 'Partido de Futbol', 'Clasico capitalino',     'Estadio El Campin',           '2026-12-12 16:00:00', 500, 500, 80000,
+    'https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=800&q=70');
+
+-- Evento con sillas numeradas: 8 filas (A a H) de 12 sillas = 96 cupos
+INSERT INTO eventos (organizador_id, nombre, descripcion, lugar, fecha, aforo_total, aforo_disponible, precio, imagen_url, tipo, filas, sillas_por_fila) VALUES
+(1, 'Obra de Teatro', 'Comedia para toda la familia', 'Teatro Colon', '2026-12-19 20:00:00', 96, 96, 60000,
+    'https://images.unsplash.com/photo-1503095396549-807759245b35?w=800&q=70', 'numerado', 8, 12);
+
+INSERT INTO sillas (evento_id, fila, numero)
+WITH RECURSIVE f (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM f WHERE n < 8),
+               s (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < 12)
+SELECT 3, CHAR(64 + f.n), s.n FROM f CROSS JOIN s ORDER BY f.n, s.n;

@@ -29,16 +29,32 @@ router.param('id', (req, res, next, id) => {
  *         aforo_disponible: { type: integer, example: 100 }
  *         precio: { type: number, example: 50000 }
  *         estado: { type: string, enum: [activo, cancelado, finalizado] }
+ *         imagen_url: { type: string, nullable: true, example: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800' }
+ *         tipo: { type: string, enum: [general, numerado] }
+ *         filas: { type: integer, nullable: true, example: null }
+ *         sillas_por_fila: { type: integer, nullable: true, example: null }
  *     EventoNuevo:
  *       type: object
- *       required: [nombre, lugar, fecha, aforo_total]
+ *       required: [nombre, lugar, fecha]
+ *       description: Para tipo general se manda aforo_total; para tipo numerado se mandan filas y sillas_por_fila (el aforo se calcula solo)
  *       properties:
  *         nombre: { type: string, example: Concierto de Rock }
  *         descripcion: { type: string, example: Bandas locales en vivo }
  *         lugar: { type: string, example: Teatro Jorge Eliecer Gaitan }
  *         fecha: { type: string, example: '2026-12-05 19:00:00' }
+ *         tipo: { type: string, enum: [general, numerado], default: general }
  *         aforo_total: { type: integer, example: 100 }
+ *         filas: { type: integer, minimum: 1, maximum: 26, example: 8 }
+ *         sillas_por_fila: { type: integer, minimum: 1, maximum: 40, example: 12 }
  *         precio: { type: number, example: 50000 }
+ *         imagen_url: { type: string, example: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=800' }
+ *     Silla:
+ *       type: object
+ *       properties:
+ *         id: { type: integer, example: 1 }
+ *         fila: { type: string, example: A }
+ *         numero: { type: integer, example: 5 }
+ *         ocupada: { type: boolean, example: false }
  */
 
 /**
@@ -114,5 +130,27 @@ router.post('/', verificarToken, permitirRoles('organizador'), eventoController.
 router.get('/:id', eventoController.obtener);
 router.put('/:id', verificarToken, permitirRoles('organizador'), eventoController.actualizar);
 router.delete('/:id', verificarToken, permitirRoles('organizador'), eventoController.eliminar);
+
+/**
+ * @openapi
+ * /api/eventos/{id}/sillas:
+ *   get:
+ *     tags: [Eventos]
+ *     summary: Mapa de sillas de un evento numerado (cuales estan libres y cuales ocupadas)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Sillas del evento
+ *         content:
+ *           application/json:
+ *             schema: { type: array, items: { $ref: '#/components/schemas/Silla' } }
+ *       400: { description: El evento es de entrada general }
+ *       404: { description: Evento no encontrado }
+ */
+router.get('/:id/sillas', eventoController.sillas);
 
 module.exports = router;

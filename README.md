@@ -1,6 +1,6 @@
 # API de Ticketing
 
-API RESTful para la gestión de eventos y venta de entradas digitales: administra eventos, controla el aforo en tiempo real, procesa compras y valida boletas para evitar la venta duplicada.
+API RESTful para la gestión de eventos y venta de entradas digitales: administra eventos, controla el aforo en tiempo real, procesa compras y valida boletas para evitar la venta duplicada. Incluye una página web para comprar boletas y validarlas en la entrada con código QR.
 
 **Equipo:** Andres Felipe Morales Velosa, Oscar Andres Leon Galarza, Isabela Martínez Peñaloza
 **Materia:** Desarrollo de Software Web Backend
@@ -9,8 +9,9 @@ API RESTful para la gestión de eventos y venta de entradas digitales: administr
 
 - Node.js + Express
 - MySQL (`mysql2`)
-- JWT para autenticación con roles `organizador` y `comprador`
+- JWT y bcrypt para autenticación con roles `organizador` y `comprador`
 - Swagger para la documentación
+- Página web en HTML, CSS y JavaScript (carpeta `public/`), con `qrcode-generator` y `jsqr` para los códigos QR
 
 ## Cómo correr el proyecto
 
@@ -18,7 +19,7 @@ API RESTful para la gestión de eventos y venta de entradas digitales: administr
    ```bash
    npm install
    ```
-2. Crear la base de datos con las tablas y datos de prueba:
+2. Crear la base de datos con las tablas y datos de prueba (si ya la tenían, vuelvan a correrlo: borra y crea todo de nuevo):
    ```bash
    mysql -u root -p < database/schema.sql
    ```
@@ -28,8 +29,11 @@ API RESTful para la gestión de eventos y venta de entradas digitales: administr
    ```bash
    npm run dev
    ```
+   - Página web: http://localhost:3000
    - API: http://localhost:3000/api
    - Documentación Swagger: http://localhost:3000/api-docs
+
+Usuarios de prueba (contraseña `123456`): `organizador@ticketing.com` y `comprador@ticketing.com`.
 
 ## Estructura
 
@@ -40,40 +44,48 @@ database/      script SQL de la base de datos
 middlewares/   autenticación/roles y manejo de errores
 models/        consultas SQL de cada tabla
 routes/        definición de las rutas (y comentarios de Swagger)
+public/        página web (frontend)
+pruebas/       pruebas de concurrencia y sobreventa
 index.js       arranque del servidor
 ```
 
 ## Endpoints
 
-| Método | Ruta | Estado |
+| Método | Ruta | Quién |
 |---|---|---|
-| GET | `/api/eventos` | Listo |
-| GET | `/api/eventos/:id` | Listo |
-| POST | `/api/eventos` | Listo |
-| PUT | `/api/eventos/:id` | Listo |
-| DELETE | `/api/eventos/:id` | Listo |
-| GET | `/api/boletas` (`?evento_id=`) | Listo |
-| GET | `/api/boletas/:id` | Listo |
-| PATCH | `/api/boletas/:id/anular` | Listo (falta devolver el cupo) |
-| DELETE | `/api/boletas/:id` | Listo |
-| POST | `/api/boletas/validar` | Pendiente |
-| GET | `/api/compras` | Listo |
-| GET | `/api/compras/:id` | Listo |
-| POST | `/api/compras` | Pendiente |
-| POST | `/api/compras/:id/pagar` | Pendiente |
-| GET | `/api/usuarios` | Listo |
-| GET | `/api/usuarios/:id` | Listo |
-| POST | `/api/auth/registro` | Pendiente |
-| POST | `/api/auth/login` | Pendiente |
+| POST | `/api/auth/registro` | Cualquiera |
+| POST | `/api/auth/login` | Cualquiera |
+| GET | `/api/usuarios` | Organizador |
+| GET | `/api/usuarios/:id` | Con sesión (el comprador solo se ve a sí mismo) |
+| GET | `/api/eventos` | Cualquiera |
+| GET | `/api/eventos/:id` | Cualquiera |
+| GET | `/api/eventos/:id/sillas` | Cualquiera (mapa de sillas de eventos numerados) |
+| POST | `/api/eventos` | Organizador |
+| PUT | `/api/eventos/:id` | Organizador dueño del evento |
+| DELETE | `/api/eventos/:id` | Organizador dueño del evento |
+| GET | `/api/compras` | Con sesión (el comprador ve solo las suyas) |
+| GET | `/api/compras/:id` | Con sesión |
+| POST | `/api/compras` | Comprador |
+| POST | `/api/compras/:id/pagar` | Comprador dueño de la compra |
+| GET | `/api/boletas` (`?evento_id=`) | Con sesión (cada quien ve solo las suyas) |
+| GET | `/api/boletas/:id` | Con sesión |
+| POST | `/api/boletas/validar` | Organizador dueño del evento |
+| PATCH | `/api/boletas/:id/anular` | Organizador dueño del evento |
+| DELETE | `/api/boletas/:id` | Organizador dueño del evento |
 
-## Pendientes
+## Reglas del negocio
 
-Buscar `TODO` en el código para ver dónde va cada cosa.
+- **Sin sobreventa:** la compra bloquea el evento mientras revisa y descuenta el aforo, así varias compras al mismo tiempo no pueden vender más cupos de los que hay.
+- **Dos tipos de evento:** entrada general (se compra una cantidad) o sillas numeradas (cada comprador escoge sus sillas en un mapa; una silla nunca queda vendida dos veces).
+- **Máximo 10 boletas por persona** en cada evento, sumando todas sus compras (las anuladas o vencidas no cuentan).
+- **15 minutos para pagar:** si la compra no se paga a tiempo se cancela sola, sus boletas se anulan y los cupos (y sillas) vuelven al evento.
+- **Validación en la entrada:** solo boletas pagadas, de un evento activo y del organizador que valida; cada boleta deja entrar una sola vez, aunque la escaneen en dos puertas al mismo tiempo.
+- **Anular o eliminar** una boleta válida devuelve el cupo (y la silla) al evento.
 
-- **Autenticación:** registro y login con JWT (`authController.js`) y completar `middlewares/auth.js` (por ahora deja pasar todo).
-- **Flujo de compra y aforo:** crear la compra en una transacción que bloquee el evento, descuente el aforo y genere las boletas (`compraModel.js`); pago simulado.
-- **Validación de boletas:** marcar la boleta como usada y rechazar las repetidas o anuladas.
-- **Swagger:** documentar boletas, compras, usuarios y auth (ya está el ejemplo en `routes/eventoRoutes.js`).
-- **Pruebas:** concurrencia y prevención de sobreventa.
+## Pruebas
 
-Usuarios de prueba (contraseña `123456`): `organizador@ticketing.com` y `comprador@ticketing.com`.
+Con el servidor y MySQL encendidos:
+
+```bash
+node pruebas/concurrencia.js
+```

@@ -18,12 +18,15 @@ const router = Router();
  *         total: { type: number, example: 100000 }
  *         estado: { type: string, enum: [pendiente, pagada, cancelada] }
  *         creado_en: { type: string, example: '2026-11-06 18:45:51' }
+ *         segundos_para_pagar: { type: integer, nullable: true, example: 840, description: Solo en compras pendientes }
  *     CompraNueva:
  *       type: object
- *       required: [evento_id, cantidad]
+ *       required: [evento_id]
+ *       description: En eventos de entrada general se manda cantidad; en eventos con sillas numeradas se manda la lista de sillas. Maximo 10 boletas por persona en cada evento
  *       properties:
  *         evento_id: { type: integer, example: 1 }
- *         cantidad: { type: integer, minimum: 1, example: 2 }
+ *         cantidad: { type: integer, minimum: 1, maximum: 10, example: 2 }
+ *         sillas: { type: array, items: { type: integer }, example: [5, 6] }
  */
 
 /**

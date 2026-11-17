@@ -42,22 +42,35 @@ function codigoQR(texto) {
 
 const escaner = { stream: null, activo: false };
 
-// Prende la camara y revisa cada cuadro del video hasta encontrar un QR
-async function iniciarEscaner(video, alLeer) {
+// Brillo promedio de una imagen (0 = negro total), mirando uno de cada 50 pixeles
+function brillo(imagen) {
+    let suma = 0;
+    let cuantos = 0;
+    for (let i = 0; i < imagen.data.length; i += 4 * 50) {
+        suma += imagen.data[i] + imagen.data[i + 1] + imagen.data[i + 2];
+        cuantos++;
+    }
+    return suma / (cuantos * 3);
+}
+
+// Prende la camara (la escogida, o la trasera en el celular) y revisa cada cuadro
+// del video hasta encontrar un QR. alVerNegro avisa si la camara solo manda negro
+async function iniciarEscaner(video, alLeer, { camaraId, alVerNegro } = {}) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('sin-camara');
     }
-    // 'environment' pide la camara trasera en el celular
-    escaner.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const pedido = camaraId ? { deviceId: { exact: camaraId } } : { facingMode: { ideal: 'environment' } };
+    escaner.stream = await navigator.mediaDevices.getUserMedia({ video: pedido });
     video.srcObject = escaner.stream;
     await video.play();
     escaner.activo = true;
 
     const lienzo = document.createElement('canvas');
     const contexto = lienzo.getContext('2d', { willReadFrequently: true });
+    let cuadros = 0;
     const revisar = () => {
         if (!escaner.activo) return;
-        if (video.readyState >= video.HAVE_ENOUGH_DATA) {
+        if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth) {
             lienzo.width = video.videoWidth;
             lienzo.height = video.videoHeight;
             contexto.drawImage(video, 0, 0);
@@ -67,10 +80,35 @@ async function iniciarEscaner(video, alLeer) {
                 alLeer(qr.data);
                 return;
             }
+            // Despues de unos 2 segundos se revisa si la imagen es completamente negra
+            cuadros++;
+            if (cuadros === 60 && alVerNegro && brillo(imagen) < 6) alVerNegro();
         }
         requestAnimationFrame(revisar);
     };
     requestAnimationFrame(revisar);
+}
+
+// Camaras del equipo (los nombres solo aparecen despues de dar permiso)
+async function listarCamaras() {
+    const dispositivos = await navigator.mediaDevices.enumerateDevices();
+    return dispositivos.filter((d) => d.kind === 'videoinput');
+}
+
+function camaraGuardada() {
+    try {
+        return localStorage.getItem('camara') || null;
+    } catch {
+        return null;
+    }
+}
+
+function guardarCamara(id) {
+    try {
+        localStorage.setItem('camara', id);
+    } catch {
+        // si el navegador no deja guardar, solo no se recuerda la camara
+    }
 }
 
 function detenerEscaner() {
@@ -91,6 +129,16 @@ function mensajeCamara(error) {
 
 function cargando() {
     app.innerHTML = '<p class="vacio">Cargando...</p>';
+}
+
+// Va a una pantalla; si ya se esta en ella, la vuelve a dibujar
+// (cambiar location.hash al mismo valor no dispara el cambio de pantalla)
+function irA(hash) {
+    if (location.hash === hash) {
+        navegar();
+    } else {
+        location.hash = hash;
+    }
 }
 
 // ---------- Menu ----------
@@ -118,7 +166,7 @@ function pintarMenu() {
         salir.onclick = () => {
             Sesion.cerrar();
             avisar('Sesión cerrada');
-            location.hash = '#/eventos';
+            irA('#/eventos');
         };
     }
 }
@@ -202,10 +250,12 @@ async function entrar(email, password) {
     const { token, usuario } = await api('POST', '/auth/login', { email, password });
     Sesion.guardar(token, usuario);
     avisar(`¡Bienvenido, ${usuario.nombre}!`);
-    location.hash = usuario.rol === 'organizador' ? '#/organizador' : '#/eventos';
+    irA(usuario.rol === 'organizador' ? '#/organizador' : '#/eventos');
 }
 
 // ---------- Eventos y compra ----------
+
+const MAX_BOLETAS = 10;   // maximo de boletas por persona en cada evento (igual que en la API)
 
 function barraAforo(evento) {
     const porcentaje = evento.aforo_total ? (evento.aforo_disponible / evento.aforo_total) * 100 : 0;
@@ -213,46 +263,137 @@ function barraAforo(evento) {
     return `<div class="aforo ${clase}"><div style="width:${porcentaje}%"></div></div>`;
 }
 
-async function pantallaEventos() {
-    cargando();
-    const usuario = Sesion.usuario();
-    const eventos = await api('GET', '/eventos');
+// Imagen del evento; si no tiene (o el link no carga) queda un fondo de color con la inicial
+function imagenEvento(evento, clase = 'portada') {
+    const inicial = texto((evento.nombre || '?').trim().charAt(0).toUpperCase());
+    const imagen = evento.imagen_url
+        ? `<img src="${texto(evento.imagen_url)}" alt="" loading="lazy" onerror="this.remove()">`
+        : '';
+    return `<div class="${clase}"><span>${inicial}</span>${imagen}</div>`;
+}
 
-    const tarjetas = eventos.map((evento) => {
-        const agotado = evento.aforo_disponible === 0;
-        const activo = evento.estado === 'activo';
-        let compra = '';
-        if (!usuario) {
-            compra = '<a href="#/login" class="boton secundario ancho">Inicia sesión para comprar</a>';
-        } else if (usuario.rol === 'comprador' && activo && !agotado) {
-            compra = `
-                <form class="comprar" data-evento="${evento.id}">
-                    <input type="number" min="1" max="${evento.aforo_disponible}" value="1" aria-label="Cantidad">
-                    <button class="boton">Comprar</button>
-                </form>`;
-        } else if (agotado) {
-            compra = '<p class="dato"><b>Agotado</b></p>';
-        }
+function fechaCorta(valor) {
+    const d = new Date(valor.replace(' ', 'T'));
+    return d.toLocaleString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
 
-        return `
-            <article class="tarjeta evento">
+function tarjetaEvento(evento, usuario) {
+    const agotado = evento.aforo_disponible === 0;
+    const activo = evento.estado === 'activo';
+    const numerado = evento.tipo === 'numerado';
+    let compra = '';
+    if (!activo) {
+        compra = '';
+    } else if (agotado) {
+        compra = '<p class="dato"><b>Agotado</b></p>';
+    } else if (numerado) {
+        compra = `<a href="#/evento/${evento.id}" class="boton ancho">💺 Escoger sillas</a>`;
+    } else if (!usuario) {
+        compra = '<a href="#/login" class="boton secundario ancho">Inicia sesión para comprar</a>';
+    } else if (usuario.rol === 'comprador') {
+        compra = `
+            <form class="comprar" data-evento="${evento.id}">
+                <input type="number" min="1" max="${Math.min(MAX_BOLETAS, evento.aforo_disponible)}" value="1" aria-label="Cantidad">
+                <button class="boton">Comprar</button>
+            </form>`;
+    }
+
+    return `
+        <article class="tarjeta evento">
+            ${imagenEvento(evento)}
+            ${activo ? '' : `<span class="etiqueta sobre-imagen ${evento.estado}">${evento.estado}</span>`}
+            <div class="evento-cuerpo">
+                <p class="evento-fecha">${fechaCorta(evento.fecha)}</p>
                 <h2>${texto(evento.nombre)}</h2>
-                <span class="etiqueta ${evento.estado}">${evento.estado}</span>
-                <p class="dato">📅 ${fecha(evento.fecha)}</p>
                 <p class="dato">📍 ${texto(evento.lugar)}</p>
-                ${evento.descripcion ? `<p class="dato">${texto(evento.descripcion)}</p>` : ''}
+                <p class="dato">${numerado ? '💺 Sillas numeradas' : '🎫 Entrada general'}</p>
                 <p class="precio">${pesos(evento.precio)}</p>
                 ${barraAforo(evento)}
                 <p class="dato">${evento.aforo_disponible} de ${evento.aforo_total} cupos disponibles</p>
                 ${compra}
-            </article>`;
-    }).join('');
+            </div>
+        </article>`;
+}
+
+// Aplica el buscador y los filtros sobre la lista de eventos
+function filtrarEventos(eventos, filtros) {
+    const buscar = filtros.buscar.trim().toLowerCase();
+    const ahora = new Date();
+    const limite = { semana: 7, mes: 30 }[filtros.cuando];
+    let lista = eventos.filter((e) => {
+        if (buscar && !`${e.nombre} ${e.lugar}`.toLowerCase().includes(buscar)) return false;
+        if (filtros.lugar && e.lugar !== filtros.lugar) return false;
+        if (filtros.tipo && e.tipo !== filtros.tipo) return false;
+        if (filtros.disponibles && (e.aforo_disponible === 0 || e.estado !== 'activo')) return false;
+        if (limite) {
+            const dias = (new Date(e.fecha.replace(' ', 'T')) - ahora) / 86400000;
+            if (dias < 0 || dias > limite) return false;
+        }
+        return true;
+    });
+    if (filtros.orden === 'precio-asc') lista = [...lista].sort((a, b) => a.precio - b.precio);
+    if (filtros.orden === 'precio-desc') lista = [...lista].sort((a, b) => b.precio - a.precio);
+    return lista;
+}
+
+async function pantallaEventos() {
+    cargando();
+    const usuario = Sesion.usuario();
+    const eventos = await api('GET', '/eventos');
+    const lugares = [...new Set(eventos.map((e) => e.lugar))].sort();
 
     app.innerHTML = `
-        <h1>Eventos</h1>
-        <p class="subtitulo">Elige un evento y compra tus boletas.</p>
-        ${eventos.length ? `<div class="rejilla">${tarjetas}</div>` : '<p class="vacio">No hay eventos todavía.</p>'}`;
+        <section class="hero">
+        <h1>Encuentra tu próximo evento</h1>
+        <p class="subtitulo">Conciertos, partidos y obras de teatro. Compra tus boletas en segundos.</p>
+        <div class="filtros">
+            <input id="f-buscar" type="search" placeholder="🔎 Buscar por nombre o lugar" aria-label="Buscar">
+            <select id="f-lugar" aria-label="Lugar">
+                <option value="">Todos los lugares</option>
+                ${lugares.map((l) => `<option value="${texto(l)}">${texto(l)}</option>`).join('')}
+            </select>
+            <select id="f-cuando" aria-label="Fecha">
+                <option value="">Cualquier fecha</option>
+                <option value="semana">Próximos 7 días</option>
+                <option value="mes">Próximos 30 días</option>
+            </select>
+            <select id="f-tipo" aria-label="Tipo de entrada">
+                <option value="">Todo tipo de entrada</option>
+                <option value="general">Entrada general</option>
+                <option value="numerado">Sillas numeradas</option>
+            </select>
+            <select id="f-orden" aria-label="Ordenar">
+                <option value="fecha">Ordenar por fecha</option>
+                <option value="precio-asc">Precio: menor a mayor</option>
+                <option value="precio-desc">Precio: mayor a menor</option>
+            </select>
+            <label class="casilla"><input type="checkbox" id="f-disponibles"> Solo con cupos</label>
+        </div>
+        </section>
+        <div id="lista-eventos"></div>`;
 
+    const valor = (id) => document.getElementById(id);
+    const pintarLista = () => {
+        const lista = filtrarEventos(eventos, {
+            buscar: valor('f-buscar').value,
+            lugar: valor('f-lugar').value,
+            cuando: valor('f-cuando').value,
+            tipo: valor('f-tipo').value,
+            orden: valor('f-orden').value,
+            disponibles: valor('f-disponibles').checked
+        });
+        valor('lista-eventos').innerHTML = lista.length
+            ? `<div class="rejilla">${lista.map((e) => tarjetaEvento(e, usuario)).join('')}</div>`
+            : `<p class="vacio">${eventos.length ? 'Ningún evento coincide con los filtros.' : 'No hay eventos todavía.'}</p>`;
+        conectarCompras();
+    };
+    ['f-buscar', 'f-lugar', 'f-cuando', 'f-tipo', 'f-orden', 'f-disponibles'].forEach((id) => {
+        valor(id).addEventListener('input', pintarLista);
+    });
+    pintarLista();
+}
+
+function conectarCompras() {
     document.querySelectorAll('form.comprar').forEach((form) => {
         form.onsubmit = async (e) => {
             e.preventDefault();
@@ -272,7 +413,147 @@ async function pantallaEventos() {
     });
 }
 
+// ---------- Mapa de sillas (eventos numerados) ----------
+
+async function pantallaSillas(eventoId) {
+    cargando();
+    const usuario = Sesion.usuario();
+    const [evento, sillas] = await Promise.all([
+        api('GET', `/eventos/${eventoId}`),
+        api('GET', `/eventos/${eventoId}/sillas`)
+    ]);
+    const elegidas = new Map();   // id -> nombre (ej. "A5")
+
+    const filas = {};
+    sillas.forEach((s) => { (filas[s.fila] ||= []).push(s); });
+    const puedeComprar = usuario && usuario.rol === 'comprador' && evento.estado === 'activo';
+
+    const mapa = Object.entries(filas).map(([fila, lista]) => `
+        <div class="fila-sillas">
+            <span class="letra">${fila}</span>
+            ${lista.map((s) => `
+                <button class="silla" data-id="${s.id}" data-nombre="${fila}${s.numero}"
+                        ${s.ocupada || !puedeComprar ? 'disabled' : ''} ${s.ocupada ? 'data-ocupada' : ''}
+                        title="Fila ${fila}, silla ${s.numero}${s.ocupada ? ' (ocupada)' : ''}">${s.numero}</button>`).join('')}
+            <span class="letra">${fila}</span>
+        </div>`).join('');
+
+    let aviso = '';
+    if (!usuario) aviso = '<a href="#/login" class="boton">Inicia sesión para comprar</a>';
+    else if (usuario.rol !== 'comprador') aviso = '<p class="dato">Solo los compradores pueden escoger sillas.</p>';
+    else if (evento.estado !== 'activo') aviso = `<p class="dato">Este evento está ${evento.estado}.</p>`;
+
+    app.innerHTML = `
+        <p><a href="#/eventos">← Volver a eventos</a></p>
+        <div class="tarjeta cabecera-evento">
+            ${imagenEvento(evento, 'miniatura')}
+            <div>
+                <h1>${texto(evento.nombre)}</h1>
+                <p class="dato">📅 ${fecha(evento.fecha)} · 📍 ${texto(evento.lugar)}</p>
+                <p class="dato">${pesos(evento.precio)} por silla · ${evento.aforo_disponible} de ${evento.aforo_total} libres</p>
+            </div>
+        </div>
+        <div class="tarjeta mapa-sillas">
+            <div class="leyenda">
+                <span><i class="silla"></i> Libre</span>
+                <span><i class="silla elegida"></i> Tu selección</span>
+                <span><i class="silla" data-ocupada></i> Ocupada</span>
+            </div>
+            <div class="desplazable">
+                <div class="mapa">
+                    <div class="escenario">ESCENARIO</div>
+                    ${mapa}
+                </div>
+            </div>
+        </div>
+        <div class="tarjeta resumen-sillas">
+            <div>
+                <b id="sillas-elegidas">No has escogido sillas</b>
+                <p class="dato">Puedes escoger hasta ${MAX_BOLETAS} sillas por evento.</p>
+            </div>
+            <div class="resumen-total">
+                <span id="total-sillas" class="precio">${pesos(0)}</span>
+                ${aviso || '<button id="btn-comprar-sillas" class="boton" disabled>Comprar</button>'}
+            </div>
+        </div>`;
+
+    const resumen = document.getElementById('sillas-elegidas');
+    const total = document.getElementById('total-sillas');
+    const botonComprar = document.getElementById('btn-comprar-sillas');
+    const actualizar = () => {
+        // Ordenadas por fila y numero (A1, A5, B3...), no en el orden en que se tocaron
+        const nombres = [...elegidas.values()].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+        resumen.textContent = nombres.length ? `Sillas: ${nombres.join(', ')}` : 'No has escogido sillas';
+        total.textContent = pesos(nombres.length * evento.precio);
+        if (botonComprar) botonComprar.disabled = nombres.length === 0;
+    };
+
+    app.querySelectorAll('.mapa .silla').forEach((boton) => {
+        boton.onclick = () => {
+            const id = Number(boton.dataset.id);
+            if (elegidas.has(id)) {
+                elegidas.delete(id);
+            } else if (elegidas.size >= MAX_BOLETAS) {
+                avisar(`Puedes escoger máximo ${MAX_BOLETAS} sillas`, 'mal');
+                return;
+            } else {
+                elegidas.set(id, boton.dataset.nombre);
+            }
+            boton.classList.toggle('elegida', elegidas.has(id));
+            actualizar();
+        };
+    });
+
+    if (botonComprar) {
+        botonComprar.onclick = async () => {
+            botonComprar.disabled = true;
+            try {
+                const compra = await api('POST', '/compras', { evento_id: evento.id, sillas: [...elegidas.keys()] });
+                avisar(`Compra exitosa: sillas ${compra.sillas.join(', ')} por ${pesos(compra.total)}. Tienes 15 minutos para pagarla.`);
+                location.hash = '#/compras';
+            } catch (error) {
+                avisar(error.message, 'mal');
+                // Alguien pudo ocupar una silla mientras escogias: se recarga el mapa
+                pantallaSillas(eventoId);
+            }
+        };
+    }
+}
+
 // ---------- Mis compras y boletas ----------
+
+let relojCompras = null;   // intervalo del contador de los 15 minutos
+
+function minutosYSegundos(segundos) {
+    const m = Math.floor(segundos / 60);
+    const s = segundos % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Actualiza cada segundo los contadores de las compras pendientes
+function iniciarContadores() {
+    clearInterval(relojCompras);
+    const actualizar = () => {
+        document.querySelectorAll('[data-vence]').forEach((contador) => {
+            const quedan = Math.max(0, Math.round((Number(contador.dataset.vence) - Date.now()) / 1000));
+            const boton = document.querySelector(`[data-pagar="${contador.dataset.compra}"]`);
+            if (quedan === 0) {
+                contador.textContent = '⌛ Se venció el tiempo para pagar';
+                contador.className = 'contador vencido';
+                if (boton) boton.remove();
+            } else {
+                contador.textContent = `⏱ Te quedan ${minutosYSegundos(quedan)} para pagar`;
+                contador.classList.toggle('urgente', quedan <= 120);
+            }
+        });
+    };
+    actualizar();
+    relojCompras = setInterval(actualizar, 1000);
+}
+
+function nombreSilla(boleta) {
+    return boleta.fila ? `Fila ${boleta.fila} · Silla ${boleta.silla}` : '';
+}
 
 async function pantallaCompras() {
     cargando();
@@ -281,34 +562,49 @@ async function pantallaCompras() {
         api('GET', '/eventos'),
         api('GET', '/boletas')
     ]);
-    const nombreEvento = Object.fromEntries(eventos.map((e) => [e.id, e.nombre]));
+    const eventoPorId = Object.fromEntries(eventos.map((e) => [e.id, e]));
 
     const lista = compras.map((compra) => {
+        const evento = eventoPorId[compra.evento_id] || { nombre: `Evento ${compra.evento_id}` };
         const suyas = boletas.filter((b) => b.compra_id === compra.id);
-        const pagada = compra.estado === 'pagada';
+        const pendiente = compra.estado === 'pendiente';
+        const sillas = suyas.filter((b) => b.fila).map((b) => `${b.fila}${b.silla}`);
+
+        let detalle;
+        if (compra.estado === 'pagada') {
+            detalle = `
+                <div class="boletas">
+                    ${suyas.map((b) => `
+                        <div class="boleta">
+                            <div class="qr">${b.estado === 'valida' ? codigoQR(b.codigo) : ''}</div>
+                            <div class="codigo">${texto(b.codigo)}</div>
+                            ${nombreSilla(b) ? `<div class="silla-boleta">${nombreSilla(b)}</div>` : ''}
+                            <span class="etiqueta ${b.estado}">${b.estado}</span>
+                        </div>`).join('')}
+                </div>`;
+        } else if (pendiente) {
+            detalle = `
+                <p class="contador" data-compra="${compra.id}" data-vence="${Date.now() + compra.segundos_para_pagar * 1000}"></p>
+                ${sillas.length ? `<p class="dato">Sillas apartadas: ${sillas.join(', ')}</p>` : ''}
+                <p class="dato">Cuando pagues verás aquí los códigos QR de tus boletas.</p>`;
+        } else {
+            detalle = '<p class="dato">Esta compra venció porque no se pagó en 15 minutos.</p>';
+        }
+
         return `
-            <article class="tarjeta">
+            <article class="tarjeta compra">
                 <div class="compra-cabecera">
-                    <div>
-                        <h2>${texto(nombreEvento[compra.evento_id] || `Evento ${compra.evento_id}`)}</h2>
+                    ${imagenEvento(evento, 'miniatura')}
+                    <div class="compra-info">
+                        <h2>${texto(evento.nombre)}</h2>
                         <span class="dato">Compra #${compra.id} · ${fecha(compra.creado_en)} · ${compra.cantidad} boleta(s) · <b>${pesos(compra.total)}</b></span>
                     </div>
-                    <div>
+                    <div class="compra-acciones">
                         <span class="etiqueta ${compra.estado}">${compra.estado}</span>
-                        ${compra.estado === 'pendiente' ? `<button class="boton exito chico" data-pagar="${compra.id}">Pagar</button>` : ''}
+                        ${pendiente ? `<button class="boton exito chico" data-pagar="${compra.id}">Pagar</button>` : ''}
                     </div>
                 </div>
-                ${pagada ? `
-                    <div class="boletas">
-                        ${suyas.map((b) => `
-                            <div class="boleta">
-                                <div class="qr">${b.estado === 'valida' ? codigoQR(b.codigo) : ''}</div>
-                                <div class="codigo">${texto(b.codigo)}</div>
-                                <span class="etiqueta ${b.estado}">${b.estado}</span>
-                            </div>`).join('')}
-                    </div>` : compra.estado === 'cancelada'
-                        ? '<p class="dato">Esta compra venció porque no se pagó en 15 minutos.</p>'
-                        : '<p class="dato">Tienes 15 minutos para pagar; luego verás aquí los códigos de tus boletas.</p>'}
+                ${detalle}
             </article>`;
     }).join('');
 
@@ -316,6 +612,8 @@ async function pantallaCompras() {
         <h1>Mis compras</h1>
         <p class="subtitulo">Aquí ves tus compras y los códigos de tus boletas para entrar al evento.</p>
         ${compras.length ? `<div class="pila">${lista}</div>` : '<p class="vacio">Todavía no has comprado nada. <a href="#/eventos">Ver eventos</a></p>'}`;
+
+    iniciarContadores();
 
     document.querySelectorAll('[data-pagar]').forEach((boton) => {
         boton.onclick = async () => {
@@ -326,7 +624,7 @@ async function pantallaCompras() {
                 pantallaCompras();
             } catch (error) {
                 avisar(error.message, 'mal');
-                boton.disabled = false;
+                pantallaCompras();
             }
         };
     });
@@ -342,6 +640,7 @@ async function pantallaOrganizador() {
     const filas = eventos.map((e) => `
         <tr>
             <td><b>${texto(e.nombre)}</b><br><span class="dato">${fecha(e.fecha)}</span></td>
+            <td>${e.tipo === 'numerado' ? `💺 ${e.filas} filas × ${e.sillas_por_fila}` : '🎫 General'}</td>
             <td>${e.aforo_disponible} / ${e.aforo_total}</td>
             <td>${pesos(e.precio)}</td>
             <td><span class="etiqueta ${e.estado}">${e.estado}</span></td>
@@ -366,8 +665,13 @@ async function pantallaOrganizador() {
                 </form>
                 <button type="button" id="btn-escanear" class="boton secundario ancho">📷 Escanear QR con la cámara</button>
                 <div id="escaner" class="escaner oculto">
-                    <video id="video" playsinline muted></video>
+                    <div id="caja-camaras" class="oculto">
+                        <label for="camaras">Cámara</label>
+                        <select id="camaras"></select>
+                    </div>
+                    <video id="video" playsinline muted autoplay></video>
                     <p class="dato">Apunta la cámara al código QR de la boleta.</p>
+                    <p id="aviso-camara" class="resultado mal oculto">La cámara solo muestra negro. Escoge otra cámara en la lista de arriba o revisa que no esté tapada.</p>
                 </div>
                 <div id="resultado-validar"></div>
             </section>
@@ -381,18 +685,35 @@ async function pantallaOrganizador() {
                     <input id="e-lugar" required>
                     <label for="e-descripcion">Descripción</label>
                     <input id="e-descripcion">
-                    <div class="fila">
-                        <div>
-                            <label for="e-fecha">Fecha y hora</label>
-                            <input id="e-fecha" type="datetime-local" required>
+                    <label for="e-fecha">Fecha y hora</label>
+                    <input id="e-fecha" type="datetime-local" required>
+                    <label for="e-tipo">Tipo de entrada</label>
+                    <select id="e-tipo">
+                        <option value="general">🎫 Entrada general (sin puesto fijo)</option>
+                        <option value="numerado">💺 Sillas numeradas (cada quien escoge su silla)</option>
+                    </select>
+                    <div id="campos-general">
+                        <label for="e-aforo">Aforo</label>
+                        <input id="e-aforo" type="number" min="1">
+                    </div>
+                    <div id="campos-numerado" class="oculto">
+                        <div class="fila mitades">
+                            <div>
+                                <label for="e-filas">Filas (máx. 26)</label>
+                                <input id="e-filas" type="number" min="1" max="26">
+                            </div>
+                            <div>
+                                <label for="e-sillas">Sillas por fila (máx. 40)</label>
+                                <input id="e-sillas" type="number" min="1" max="40">
+                            </div>
                         </div>
-                        <div>
-                            <label for="e-aforo">Aforo</label>
-                            <input id="e-aforo" type="number" min="1" required>
-                        </div>
+                        <p class="dato" id="aforo-calculado"></p>
                     </div>
                     <label for="e-precio">Precio (COP)</label>
                     <input id="e-precio" type="number" min="0" step="1000" value="0">
+                    <label for="e-imagen">Link de la imagen (opcional)</label>
+                    <input id="e-imagen" type="url" placeholder="https://...">
+                    <div id="vista-imagen" class="vista-imagen oculto"></div>
                     <button class="boton ancho">Crear evento</button>
                 </form>
             </section>
@@ -403,7 +724,7 @@ async function pantallaOrganizador() {
             ${eventos.length ? `
                 <div class="desplazable">
                     <table class="tabla">
-                        <thead><tr><th>Evento</th><th>Cupos</th><th>Precio</th><th>Estado</th><th></th></tr></thead>
+                        <thead><tr><th>Evento</th><th>Entrada</th><th>Cupos</th><th>Precio</th><th>Estado</th><th></th></tr></thead>
                         <tbody>${filas}</tbody>
                     </table>
                 </div>` : '<p class="vacio">Aún no has creado eventos.</p>'}
@@ -438,11 +759,12 @@ async function pantallaOrganizador() {
         validarCodigo(campo.value);
     };
 
-    botonEscanear.onclick = async () => {
-        if (escaner.activo) {
-            cerrarEscaner();
-            return;
-        }
+    const listaCamaras = document.getElementById('camaras');
+    const avisoCamara = document.getElementById('aviso-camara');
+
+    async function abrirCamara(camaraId) {
+        detenerEscaner();
+        avisoCamara.classList.add('oculto');
         resultado.innerHTML = '';
         cajaEscaner.classList.remove('oculto');
         botonEscanear.textContent = '✖ Cerrar cámara';
@@ -451,25 +773,67 @@ async function pantallaOrganizador() {
                 cerrarEscaner();
                 campo.value = codigo;
                 validarCodigo(codigo);
-            });
+            }, { camaraId, alVerNegro: () => avisoCamara.classList.remove('oculto') });
         } catch (error) {
+            // Si la camara guardada ya no existe, se intenta con la que escoja el navegador
+            if (camaraId && error.name === 'OverconstrainedError') return abrirCamara(null);
             cerrarEscaner();
             resultado.innerHTML = `<div class="resultado mal">✖ ${texto(mensajeCamara(error))}</div>`;
+            return;
         }
+        // Con el permiso ya dado se puede mostrar la lista de camaras para escoger
+        const camaras = await listarCamaras();
+        const actual = escaner.stream.getVideoTracks()[0].getSettings().deviceId;
+        document.getElementById('caja-camaras').classList.toggle('oculto', camaras.length < 2);
+        listaCamaras.innerHTML = camaras.map((c, i) => `
+            <option value="${texto(c.deviceId)}" ${c.deviceId === actual ? 'selected' : ''}>${texto(c.label || `Cámara ${i + 1}`)}</option>`).join('');
+    }
+
+    listaCamaras.onchange = () => {
+        guardarCamara(listaCamaras.value);
+        abrirCamara(listaCamaras.value);
     };
 
-    // Crear evento
+    botonEscanear.onclick = () => {
+        if (escaner.activo) {
+            cerrarEscaner();
+            return;
+        }
+        abrirCamara(camaraGuardada());
+    };
+
+    // Crear evento: segun el tipo se pide el aforo o las filas y sillas
+    const campo$ = (id) => document.getElementById(id);
+    const mostrarCamposTipo = () => {
+        const numerado = campo$('e-tipo').value === 'numerado';
+        campo$('campos-general').classList.toggle('oculto', numerado);
+        campo$('campos-numerado').classList.toggle('oculto', !numerado);
+        const total = Number(campo$('e-filas').value) * Number(campo$('e-sillas').value);
+        campo$('aforo-calculado').textContent = total ? `Aforo: ${total} sillas` : '';
+    };
+    ['e-tipo', 'e-filas', 'e-sillas'].forEach((id) => campo$(id).addEventListener('input', mostrarCamposTipo));
+    campo$('e-imagen').addEventListener('input', () => {
+        const link = campo$('e-imagen').value.trim();
+        const vista = campo$('vista-imagen');
+        vista.classList.toggle('oculto', !/^https?:\/\//.test(link));
+        vista.innerHTML = /^https?:\/\//.test(link) ? `<img src="${texto(link)}" alt="Vista previa" onerror="this.parentNode.textContent='No se pudo cargar la imagen'">` : '';
+    });
+
     document.getElementById('form-evento').onsubmit = async (e) => {
         e.preventDefault();
+        const numerado = campo$('e-tipo').value === 'numerado';
         try {
             await api('POST', '/eventos', {
-                organizador_id: usuario.id,
-                nombre: document.getElementById('e-nombre').value,
-                lugar: document.getElementById('e-lugar').value,
-                descripcion: document.getElementById('e-descripcion').value || null,
-                fecha: document.getElementById('e-fecha').value.replace('T', ' ') + ':00',
-                aforo_total: Number(document.getElementById('e-aforo').value),
-                precio: Number(document.getElementById('e-precio').value)
+                nombre: campo$('e-nombre').value,
+                lugar: campo$('e-lugar').value,
+                descripcion: campo$('e-descripcion').value || null,
+                fecha: campo$('e-fecha').value.replace('T', ' ') + ':00',
+                tipo: numerado ? 'numerado' : 'general',
+                ...(numerado
+                    ? { filas: Number(campo$('e-filas').value), sillas_por_fila: Number(campo$('e-sillas').value) }
+                    : { aforo_total: Number(campo$('e-aforo').value) }),
+                precio: Number(campo$('e-precio').value),
+                imagen_url: campo$('e-imagen').value.trim() || null
             });
             avisar('Evento creado');
             pantallaOrganizador();
@@ -515,6 +879,7 @@ async function verBoletas(evento) {
     const filas = boletas.map((b) => `
         <tr>
             <td class="codigo"><b>${texto(b.codigo)}</b></td>
+            <td>${b.fila ? `${b.fila}${b.silla}` : '—'}</td>
             <td>Compra #${b.compra_id}</td>
             <td><span class="etiqueta ${b.estado}">${b.estado}</span></td>
             <td>${b.usada_en ? fecha(b.usada_en) : '—'}</td>
@@ -527,7 +892,7 @@ async function verBoletas(evento) {
             ${boletas.length ? `
                 <div class="desplazable">
                     <table class="tabla">
-                        <thead><tr><th>Código</th><th>Compra</th><th>Estado</th><th>Usada</th><th></th></tr></thead>
+                        <thead><tr><th>Código</th><th>Silla</th><th>Compra</th><th>Estado</th><th>Usada</th><th></th></tr></thead>
                         <tbody>${filas}</tbody>
                     </table>
                 </div>` : '<p class="vacio">Este evento todavía no tiene boletas vendidas.</p>'}
@@ -559,13 +924,17 @@ const pantallas = {
 };
 
 async function navegar() {
-    // Si se cambia de pantalla con la camara prendida, se apaga
+    // Si se cambia de pantalla con la camara o el contador prendidos, se apagan
     detenerEscaner();
-    if (!pantallas[location.hash]) {
+    clearInterval(relojCompras);
+
+    // Mapa de sillas de un evento: #/evento/3
+    const sillas = location.hash.match(/^#\/evento\/(\d+)$/);
+    const pantalla = sillas ? { pintar: () => pantallaSillas(Number(sillas[1])) } : pantallas[location.hash];
+    if (!pantalla) {
         location.hash = '#/eventos';
         return;
     }
-    const pantalla = pantallas[location.hash];
     const usuario = Sesion.usuario();
 
     // Las pantallas con rol piden haber iniciado sesion con ese rol

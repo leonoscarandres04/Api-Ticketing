@@ -1,6 +1,9 @@
 const Evento = require('../models/eventoModel');
 
 const ESTADOS = ['activo', 'cancelado', 'finalizado'];
+const TIPOS = ['general', 'numerado'];
+const MAX_FILAS = 26;           // filas de la A a la Z
+const MAX_SILLAS_POR_FILA = 40;
 const FORMATO_FECHA = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 // Revisa que la fecha tenga formato AAAA-MM-DD HH:MM(:SS), que exista y que sea futura
@@ -23,7 +26,7 @@ function revisarFecha(fecha) {
 
 // Revisa los datos de un evento; en una edicion (parcial) solo los campos que lleguen
 function revisarEvento(datos, parcial) {
-    const { nombre, lugar, descripcion, fecha, aforo_total, precio, estado } = datos;
+    const { nombre, lugar, descripcion, fecha, aforo_total, precio, estado, imagen_url, tipo, filas, sillas_por_fila } = datos;
 
     for (const [campo, valor] of [['nombre', nombre], ['lugar', lugar]]) {
         if (valor === undefined && parcial) continue;
@@ -41,8 +44,26 @@ function revisarEvento(datos, parcial) {
         const error = revisarFecha(fecha);
         if (error) return error;
     }
-    if (!parcial && (!Number.isInteger(aforo_total) || aforo_total <= 0)) {
-        return 'aforo_total debe ser un numero entero mayor a 0';
+    // El tipo, el aforo y las sillas solo se escogen al crear el evento
+    if (!parcial) {
+        if (tipo !== undefined && !TIPOS.includes(tipo)) {
+            return `tipo debe ser ${TIPOS.join(' o ')}`;
+        }
+        if (tipo === 'numerado') {
+            if (!Number.isInteger(filas) || filas < 1 || filas > MAX_FILAS) {
+                return `filas debe ser un numero entero entre 1 y ${MAX_FILAS}`;
+            }
+            if (!Number.isInteger(sillas_por_fila) || sillas_por_fila < 1 || sillas_por_fila > MAX_SILLAS_POR_FILA) {
+                return `sillas_por_fila debe ser un numero entero entre 1 y ${MAX_SILLAS_POR_FILA}`;
+            }
+        } else if (!Number.isInteger(aforo_total) || aforo_total <= 0) {
+            return 'aforo_total debe ser un numero entero mayor a 0';
+        }
+    }
+    if (imagen_url !== undefined && imagen_url !== null && imagen_url !== '') {
+        if (typeof imagen_url !== 'string' || imagen_url.length > 500 || !/^https?:\/\/\S+$/.test(imagen_url)) {
+            return 'imagen_url debe ser un link que empiece por http:// o https:// (maximo 500 caracteres)';
+        }
     }
     if (precio !== undefined && (typeof precio !== 'number' || !Number.isFinite(precio) || precio < 0)) {
         return 'precio debe ser un numero mayor o igual a 0';
@@ -120,4 +141,16 @@ async function eliminar(req, res) {
     res.status(204).send();
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar };
+// GET /api/eventos/:id/sillas
+async function sillas(req, res) {
+    const evento = await Evento.obtenerPorId(req.params.id);
+    if (!evento) {
+        return res.status(404).json({ mensaje: 'Evento no encontrado' });
+    }
+    if (evento.tipo !== 'numerado') {
+        return res.status(400).json({ mensaje: 'Este evento es de entrada general, no tiene sillas numeradas' });
+    }
+    res.json(await Evento.listarSillas(req.params.id));
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, sillas };

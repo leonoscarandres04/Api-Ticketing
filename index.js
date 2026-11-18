@@ -1,5 +1,8 @@
 require('dotenv').config({ quiet: true });
 
+// Las fechas de los eventos se manejan en hora de Colombia, aunque el servidor este en otro pais
+process.env.TZ = process.env.TZ || 'America/Bogota';
+
 const path = require('path');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');

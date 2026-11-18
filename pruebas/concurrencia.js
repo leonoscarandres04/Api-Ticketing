@@ -1,9 +1,15 @@
 // Pruebas de concurrencia y sobreventa
-// Uso: con el servidor y MySQL encendidos -> node pruebas/concurrencia.js
-const BASE = 'http://localhost:3000/api';
+// Uso:
+//   en el PC (servidor y MySQL encendidos) -> node pruebas/concurrencia.js
+//   contra la pagina publicada              -> node pruebas/concurrencia.js https://api-ticketing-7fsx.onrender.com
+const SERVIDOR = (process.argv[2] || 'http://localhost:3000').replace(/\/+$/, '');
+const BASE = `${SERVIDOR}/api`;
 const AFORO = 10;
 const COMPRADORES_SIMULTANEOS = 30;
 const VALIDACIONES_SIMULTANEAS = 10;
+// Varias personas compran a la vez, para que el limite de 10 boletas por persona
+// no sea lo que frene las compras: lo que debe frenarlas es el aforo
+const PERSONAS = 5;
 // Fecha del evento: un mes despues de hoy, formato 'YYYY-MM-DD HH:MM:SS'
 function fechaFutura() {
     const f = new Date();
@@ -40,6 +46,9 @@ function exigir(respuesta, esperado, descripcion) {
 }
 
 async function main() {
+    console.log(`Probando contra ${SERVIDOR}`);
+    console.log('(si es la pagina publicada y estaba dormida, la primera respuesta puede tardar unos 50 segundos)');
+
     // 1. Organizador de prueba (viene en schema.sql)
     const loginOrg = await llamar('POST', '/auth/login', {
         email: 'organizador@ticketing.com', password: '123456'
@@ -48,15 +57,20 @@ async function main() {
     const tokenOrg = loginOrg.datos.token;
     const organizadorId = loginOrg.datos.usuario.id;
 
-    // 2. Comprador nuevo (email unico para poder repetir la prueba)
-    const email = `concurrencia_${Date.now()}@test.com`;
-    const registro = await llamar('POST', '/auth/registro', {
-        nombre: 'Comprador Concurrencia', email, password: '123456', rol: 'comprador'
-    });
-    exigir(registro, 201, 'registrar al comprador');
-    const loginComp = await llamar('POST', '/auth/login', { email, password: '123456' });
-    exigir(loginComp, 200, 'iniciar sesion como comprador');
-    const tokenComp = loginComp.datos.token;
+    // 2. Compradores nuevos (email unico para poder repetir la prueba)
+    const tokensComp = [];
+    for (let i = 0; i < PERSONAS; i++) {
+        const email = `concurrencia_${Date.now()}_${i}@test.com`;
+        const registro = await llamar('POST', '/auth/registro', {
+            nombre: `Comprador Concurrencia ${i + 1}`, email, password: '123456', rol: 'comprador'
+        });
+        exigir(registro, 201, 'registrar al comprador');
+        const loginComp = await llamar('POST', '/auth/login', { email, password: '123456' });
+        exigir(loginComp, 200, 'iniciar sesion como comprador');
+        tokensComp.push(loginComp.datos.token);
+    }
+    // Cada compra la hace una de las personas, por turnos
+    const tokenDe = (i) => tokensComp[i % PERSONAS];
 
     // 3. Evento con aforo pequeno
     const evento = await llamar('POST', '/eventos', {
@@ -71,18 +85,19 @@ async function main() {
     const eventoId = evento.datos.id;
 
     // ---------- PRUEBA 1: sobreventa ----------
-    console.log(`\nPRUEBA 1: ${COMPRADORES_SIMULTANEOS} compras simultaneas, aforo ${AFORO}`);
+    console.log(`\nPRUEBA 1: ${COMPRADORES_SIMULTANEOS} compras simultaneas de ${PERSONAS} personas, aforo ${AFORO}`);
     const compras = await Promise.all(
-        Array.from({ length: COMPRADORES_SIMULTANEOS }, () =>
-            llamar('POST', '/compras', { evento_id: eventoId, cantidad: 1 }, tokenComp))
+        Array.from({ length: COMPRADORES_SIMULTANEOS }, (_, i) =>
+            llamar('POST', '/compras', { evento_id: eventoId, cantidad: 1 }, tokenDe(i)))
     );
     const conteoCompras = contar(compras);
 
-    // Pagar las compras exitosas (la validacion exige compra pagada)
-    const comprasExitosas = compras.filter(c => c.status === 201);
+    // Pagar las compras exitosas (la validacion exige compra pagada); cada quien paga la suya
     const pagos = await Promise.all(
-        comprasExitosas.map(c =>
-            llamar('POST', `/compras/${c.datos.compra_id}/pagar`, null, tokenComp))
+        compras.map((c, i) => c.status === 201
+            ? llamar('POST', `/compras/${c.datos.compra_id}/pagar`, null, tokenDe(i))
+            : null)
+            .filter(Boolean)
     );
     const pagosOk = pagos.filter(p => p.status === 200).length;
 

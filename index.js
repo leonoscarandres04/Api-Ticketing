@@ -8,6 +8,7 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const { probarConexion } = require('./config/database');
+const { inicializarBaseDeDatos } = require('./config/inicializar');
 const Compra = require('./models/compraModel');
 const rutas = require('./routes');
 const { rutaNoEncontrada, manejarErrores } = require('./middlewares/errores');
@@ -58,6 +59,9 @@ app.listen(PORT, async () => {
     try {
         await probarConexion();
         console.log('Conectado a la base de datos MySQL');
+        if (await inicializarBaseDeDatos()) {
+            console.log('La base de datos estaba vacia: se crearon las tablas y los datos de prueba');
+        }
     } catch (error) {
         console.error('No se pudo conectar a MySQL:', error.code || error.message, '(revisa que MySQL este encendido y los datos del .env)');
     }
